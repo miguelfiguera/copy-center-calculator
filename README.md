@@ -1,11 +1,12 @@
 # Speed Copy · Calculadora de ventas
 
-Calculadora para Speed Copy 3023, C.A. hecha con [Astro](https://astro.build) (SSR con `@astrojs/node`).
+Calculadora para Speed Copy 3023, C.A. hecha con [Astro](https://astro.build) y desplegada en Netlify (SSR con `@astrojs/netlify`).
 
 - Login con usuario y clave definidos en `.env`, con una cookie de sesión firmada (12 h).
 - Precios en dólares, con conversión a bolívares según la **tasa BCV** del día.
 - La tasa se guarda en `localStorage` con la fecha. Si el día cambió, la app pide la tasa nueva.
 - El recibo se puede imprimir (formato ticket de 80 mm) o guardar en PDF, y siempre muestra los montos en $ y en Bs.
+- Datos del cliente opcionales (nombre, apellido, cédula, teléfono y correo) que se cargan desde un modal. No se guardan en ningún lado y se borran al imprimir o al empezar una nueva venta.
 - Diseño oscuro, pensado primero para móviles.
 
 ## Configuración
@@ -16,14 +17,14 @@ npm install
 npm run dev            # http://localhost:4321
 ```
 
-Producción:
+## Despliegue en Netlify
 
-```bash
-npm run build
-npm start              # node ./dist/server/entry.mjs (usa HOST y PORT)
-```
+1. En Netlify: **Add new project → Import an existing project → GitHub** y elegir `TheDigitalLab-dev/copy-center-calculator`.
+2. La configuración de build se toma de `netlify.toml` (`npm run build`, Node 22), así que no hay que cambiar nada.
+3. En **Project configuration → Environment variables**, agregar `AUTH_USER`, `AUTH_PASSWORD` y `AUTH_SECRET`. Para el secreto se puede generar una cadena aleatoria con `openssl rand -hex 32`.
+4. Hacer el deploy. Si después cambias las variables, hay que volver a desplegar.
 
-Las variables de `.env` se leen al ejecutar la app. En producción tienen que estar definidas en el entorno del proceso.
+Cada push a `main` despliega solo.
 
 ## Lista de precios
 

@@ -7,12 +7,11 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "start": "node ./dist/server/entry.mjs",
     "astro": "astro",
     "check": "astro check"
   },
   "dependencies": {
-    "@astrojs/node": "^11.1.6",
+    "@astrojs/netlify": "^8.2.6",
     "astro": "^7.3.5",
     "jspdf": "^4.2.1"
   },
