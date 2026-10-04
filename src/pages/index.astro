@@ -17,17 +17,15 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
     </div>
 
     <div class="tasa">
-      <label for="tasa-input">Tasa BCV</label>
+      <label for="tasa-usd">$ BCV</label>
       <div class="tasa-field">
         <span>Bs</span>
-        <input
-          id="tasa-input"
-          class="input"
-          type="text"
-          inputmode="decimal"
-          placeholder="0,00"
-          autocomplete="off"
-        />
+        <input id="tasa-usd" class="input" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off" />
+      </div>
+      <label for="tasa-eur">€ BCV</label>
+      <div class="tasa-field">
+        <span>Bs</span>
+        <input id="tasa-eur" class="input" type="text" inputmode="decimal" placeholder="0,00" autocomplete="off" />
       </div>
       <small id="tasa-fecha" class="tasa-fecha">Sin tasa para hoy</small>
     </div>
@@ -111,12 +109,19 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
   <dialog id="tasa-dialog" class="dialog">
     <form id="tasa-form" method="dialog">
       <h2>Tasa BCV del día</h2>
-      <p id="tasa-dialog-msg">Ingresa el precio del dólar BCV de hoy para calcular los montos en bolívares.</p>
+      <p id="tasa-dialog-msg">Ingresa la tasa BCV de hoy del dólar, del euro o de ambos para calcular los montos en bolívares.</p>
+      <label class="tasa-dialog-label" for="tasa-dialog-usd">Dólar BCV</label>
       <div class="tasa-field big">
         <span>Bs</span>
-        <input id="tasa-dialog-input" class="input" inputmode="decimal" placeholder="0,00" autocomplete="off" required />
+        <input id="tasa-dialog-usd" class="input" inputmode="decimal" placeholder="0,00" autocomplete="off" />
       </div>
-      <p class="dialog-error" id="tasa-dialog-error" hidden>Ingresa una tasa válida mayor a 0.</p>
+      <label class="tasa-dialog-label" for="tasa-dialog-eur">Euro BCV</label>
+      <div class="tasa-field big">
+        <span>Bs</span>
+        <input id="tasa-dialog-eur" class="input" inputmode="decimal" placeholder="0,00" autocomplete="off" />
+      </div>
+      <p class="tasa-dialog-nota">Si cargas las dos, el euro se usa para papelería y útiles y el dólar para todo lo demás.</p>
+      <p class="dialog-error" id="tasa-dialog-error" hidden>Ingresa al menos una tasa válida mayor a 0.</p>
       <div class="dialog-actions">
         <button class="btn btn-ghost" type="button" id="tasa-luego">Más tarde</button>
         <button class="btn btn-primary" type="submit">Guardar tasa</button>
@@ -213,6 +218,7 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
     grid-template-columns: auto auto;
     align-items: center;
     column-gap: 0.5rem;
+    row-gap: 0.25rem;
   }
 
   .tasa label {
@@ -265,6 +271,23 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
   .tasa-field.big span {
     font-size: 1.1rem;
     left: 0.9rem;
+  }
+
+  .tasa-dialog-label {
+    display: block;
+    margin-top: 0.75rem;
+    margin-bottom: 0.3rem;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--yellow);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .tasa-dialog-nota {
+    margin-top: 0.75rem;
+    font-size: 0.8rem;
+    color: var(--muted);
   }
 
   .sin-conexion {

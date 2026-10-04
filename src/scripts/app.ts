@@ -10,6 +10,7 @@ interface Producto {
 interface Linea {
   id: string;
   nombre: string;
+  categoria?: string;
   precioUsd: number;
   cantidad: number;
 }
@@ -19,7 +20,11 @@ interface Datos {
   productos: Producto[];
 }
 
-const TASA_KEY = 'sc_tasa_bcv';
+type Moneda = 'usd' | 'eur';
+const MONEDAS: Moneda[] = ['usd', 'eur'];
+const TASA_KEYS: Record<Moneda, string> = { usd: 'sc_tasa_bcv', eur: 'sc_tasa_eur' };
+/** Con las dos tasas cargadas, esta categoría se cobra con el euro y el resto con el dólar. */
+const CATEGORIA_EURO = 'Papelería y útiles';
 const CARRITO_KEY = 'sc_carrito';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -54,30 +59,58 @@ const hoy = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-// ---------- Tasa BCV (localStorage, una por día) ----------
+// ---------- Tasas BCV de dólar y euro (localStorage, una por día) ----------
 
 interface TasaGuardada {
   fecha: string;
   valor: number;
 }
 
-function leerTasa(): TasaGuardada | null {
+type Tasas = Record<Moneda, number | null>;
+
+function leerTasa(moneda: Moneda): TasaGuardada | null {
   try {
-    const t = JSON.parse(localStorage.getItem(TASA_KEY) || 'null');
+    const t = JSON.parse(localStorage.getItem(TASA_KEYS[moneda]) || 'null');
     return t && typeof t.valor === 'number' && t.valor > 0 ? t : null;
   } catch {
     return null;
   }
 }
 
-/** Solo devuelve la tasa si fue registrada hoy. */
-function tasaDeHoy(): number | null {
-  const t = leerTasa();
-  return t && t.fecha === hoy() ? t.valor : null;
+/** Solo devuelve las tasas registradas hoy. */
+function tasasDeHoy(): Tasas {
+  const deHoy = (m: Moneda) => {
+    const t = leerTasa(m);
+    return t && t.fecha === hoy() ? t.valor : null;
+  };
+  return { usd: deHoy('usd'), eur: deHoy('eur') };
 }
 
-function guardarTasa(valor: number) {
-  localStorage.setItem(TASA_KEY, JSON.stringify({ fecha: hoy(), valor }));
+const hayTasa = (t: Tasas) => t.usd !== null || t.eur !== null;
+
+function guardarTasa(moneda: Moneda, valor: number) {
+  localStorage.setItem(TASA_KEYS[moneda], JSON.stringify({ fecha: hoy(), valor }));
+}
+
+function borrarTasa(moneda: Moneda) {
+  localStorage.removeItem(TASA_KEYS[moneda]);
+}
+
+/** Si solo hay una tasa, se usa para todo. Si están las dos, el euro es para papelería y útiles. */
+function tasaPara(categoria: string | undefined, t: Tasas): number | null {
+  if (t.usd !== null && t.eur !== null) return categoria === CATEGORIA_EURO ? t.eur : t.usd;
+  return t.usd ?? t.eur;
+}
+
+/** Las líneas guardadas antes de este cambio no traen categoría: se busca en el catálogo. */
+const categoriaDe = (l: Linea) => l.categoria ?? porId.get(l.id)?.categoria;
+
+/** Tasas en uso, con la etiqueta que se muestra en pantalla y en el recibo. */
+function tasasAplicadas(t: Tasas): [string, number][] {
+  if (t.usd !== null && t.eur !== null) return [['Dólar BCV', t.usd], ['Euro BCV (papelería)', t.eur]];
+  if (t.usd !== null) return [['Dólar BCV', t.usd]];
+  if (t.eur !== null) return [['Euro BCV', t.eur]];
+  return [];
 }
 
 const aBs = (usd: number, tasa: number) => centimos(usd * tasa) / 100;
@@ -115,21 +148,22 @@ function setCantidad(id: string, cantidad: number, base?: Omit<Linea, 'cantidad'
   } else {
     const p = base ?? porId.get(id);
     if (!p) return;
-    lineas.push({ id, nombre: p.nombre, precioUsd: p.precioUsd, cantidad });
+    lineas.push({ id, nombre: p.nombre, categoria: p.categoria, precioUsd: p.precioUsd, cantidad });
   }
   guardarCarrito();
   render();
 }
 
-function totales(tasa: number | null) {
+function totales(t: Tasas) {
   let usdCent = 0;
   let bsCent = 0;
   for (const l of lineas) {
     const sub = centimos(l.precioUsd * l.cantidad);
     usdCent += sub;
+    const tasa = tasaPara(categoriaDe(l), t);
     if (tasa) bsCent += centimos((sub / 100) * tasa);
   }
-  return { usd: usdCent / 100, bs: tasa ? bsCent / 100 : null };
+  return { usd: usdCent / 100, bs: hayTasa(t) ? bsCent / 100 : null };
 }
 
 // ---------- Render ----------
@@ -154,7 +188,7 @@ function normalizar(s: string) {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
-function renderProductos(tasa: number | null) {
+function renderProductos(t: Tasas) {
   const q = normalizar(busqueda);
   const visibles = productos.filter(
     (p) => (!filtroCategoria || p.categoria === filtroCategoria) && (!q || normalizar(p.nombre).includes(q)),
@@ -169,6 +203,7 @@ function renderProductos(tasa: number | null) {
     .map((p) => {
       const cant = cantidadDe(p.id);
       const sinPrecio = p.precioUsd <= 0;
+      const tasa = tasaPara(p.categoria, t);
       return `
       <li class="producto ${cant ? 'en-recibo' : ''} ${sinPrecio ? 'sin-precio' : ''}">
         <div class="producto-info">
@@ -188,7 +223,7 @@ function renderProductos(tasa: number | null) {
     .join('');
 }
 
-function renderRecibo(tasa: number | null) {
+function renderRecibo(t: Tasas) {
   $('recibo-fecha').textContent = new Date().toLocaleDateString('es-VE', {
     weekday: 'long',
     day: 'numeric',
@@ -200,6 +235,7 @@ function renderRecibo(tasa: number | null) {
   lineasEl.innerHTML = lineas
     .map((l) => {
       const sub = centimos(l.precioUsd * l.cantidad) / 100;
+      const tasa = tasaPara(categoriaDe(l), t);
       return `
       <li class="linea">
         <span class="linea-nombre">${escapar(l.nombre)}</span>
@@ -211,38 +247,42 @@ function renderRecibo(tasa: number | null) {
     })
     .join('');
 
-  const t = totales(tasa);
+  const tot = totales(t);
   const unidades = lineas.reduce((a, l) => a + l.cantidad, 0);
-  $('total-usd').textContent = fmtUsd(t.usd);
-  $('total-bs').textContent = t.bs !== null ? fmtBs(t.bs) : 'Falta tasa BCV';
-  $('tasa-aplicada').textContent = tasa ? `Tasa BCV: ${fmtBs(tasa)} por $1` : '';
+  $('total-usd').textContent = fmtUsd(tot.usd);
+  $('total-bs').textContent = tot.bs !== null ? fmtBs(tot.bs) : 'Falta tasa BCV';
+  $('tasa-aplicada').textContent = tasasAplicadas(t)
+    .map(([k, v]) => `${k}: ${fmtBs(v)}`)
+    .join(' · ');
   $('mb-count').textContent = String(unidades);
-  $('mb-usd').textContent = fmtUsd(t.usd);
-  $('mb-bs').textContent = t.bs !== null ? fmtBs(t.bs) : 'Bs — (falta tasa)';
+  $('mb-usd').textContent = fmtUsd(tot.usd);
+  $('mb-bs').textContent = tot.bs !== null ? fmtBs(tot.bs) : 'Bs — (falta tasa)';
 
   const vacio = lineas.length === 0;
   for (const id of ['btn-imprimir', 'btn-pdf', 'btn-nueva']) $<HTMLButtonElement>(id).disabled = vacio;
 }
 
-function renderTasa(tasa: number | null) {
-  const input = $<HTMLInputElement>('tasa-input');
-  if (document.activeElement !== input) input.value = tasa ? fmtNum.format(tasa) : '';
+function renderTasa(t: Tasas) {
+  for (const m of MONEDAS) {
+    const input = $<HTMLInputElement>(`tasa-${m}`);
+    const v = t[m];
+    if (document.activeElement !== input) input.value = v ? fmtNum.format(v) : '';
+  }
   const fechaEl = $('tasa-fecha');
-  const guardada = leerTasa();
-  if (tasa) {
+  if (hayTasa(t)) {
     fechaEl.textContent = 'Tasa de hoy';
     fechaEl.classList.remove('warn');
   } else {
-    fechaEl.textContent = guardada ? 'Tasa vencida, actualízala' : 'Sin tasa para hoy';
+    fechaEl.textContent = ultimaTasa() ? 'Tasa vencida, actualízala' : 'Sin tasa para hoy';
     fechaEl.classList.add('warn');
   }
 }
 
 function render() {
-  const tasa = tasaDeHoy();
-  renderTasa(tasa);
-  renderProductos(tasa);
-  renderRecibo(tasa);
+  const t = tasasDeHoy();
+  renderTasa(t);
+  renderProductos(t);
+  renderRecibo(t);
 }
 
 // ---------- Eventos de cantidades ----------
@@ -279,7 +319,7 @@ for (const el of [listaEl, lineasEl]) {
 
 $<HTMLInputElement>('buscar').addEventListener('input', (e) => {
   busqueda = (e.target as HTMLInputElement).value;
-  renderProductos(tasaDeHoy());
+  renderProductos(tasasDeHoy());
 });
 
 $('chips').addEventListener('click', (e) => {
@@ -287,7 +327,7 @@ $('chips').addEventListener('click', (e) => {
   if (!chip) return;
   filtroCategoria = chip.dataset.cat ?? '';
   document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', c === chip));
-  renderProductos(tasaDeHoy());
+  renderProductos(tasasDeHoy());
 });
 
 // ---------- Concepto libre ----------
@@ -307,50 +347,68 @@ $<HTMLFormElement>('libre-form').addEventListener('submit', (e) => {
   toast('Concepto agregado al recibo.');
 });
 
-// ---------- Tasa BCV: input y diálogo diario ----------
+// ---------- Tasas BCV: inputs y diálogo diario ----------
 
-const tasaInput = $<HTMLInputElement>('tasa-input');
-tasaInput.addEventListener('input', () => {
-  const v = parseNumero(tasaInput.value);
-  if (v > 0) {
-    guardarTasa(v);
-    const tasa = tasaDeHoy();
-    renderProductos(tasa);
-    renderRecibo(tasa);
-    const fechaEl = $('tasa-fecha');
-    fechaEl.textContent = 'Tasa de hoy';
-    fechaEl.classList.remove('warn');
-  }
-});
-tasaInput.addEventListener('blur', () => renderTasa(tasaDeHoy()));
-tasaInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') tasaInput.blur();
-});
+/** La última tasa registrada (de cualquier moneda), para avisar que está vencida. */
+function ultimaTasa(): TasaGuardada | null {
+  const guardadas = MONEDAS.map(leerTasa).filter((t): t is TasaGuardada => t !== null);
+  return guardadas.sort((a, b) => b.fecha.localeCompare(a.fecha))[0] ?? null;
+}
+
+for (const m of MONEDAS) {
+  const input = $<HTMLInputElement>(`tasa-${m}`);
+  input.addEventListener('input', () => {
+    // Dejar el campo vacío quita esa tasa, para poder trabajar solo con la otra
+    if (!input.value.trim()) borrarTasa(m);
+    else {
+      const v = parseNumero(input.value);
+      if (!(v > 0)) return;
+      guardarTasa(m, v);
+    }
+    render();
+  });
+  input.addEventListener('blur', () => renderTasa(tasasDeHoy()));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') input.blur();
+  });
+}
 
 const dialog = $<HTMLDialogElement>('tasa-dialog');
-const dialogInput = $<HTMLInputElement>('tasa-dialog-input');
+const dialogInputs = Object.fromEntries(
+  MONEDAS.map((m) => [m, $<HTMLInputElement>(`tasa-dialog-${m}`)]),
+) as Record<Moneda, HTMLInputElement>;
 let alGuardarTasa: (() => void) | null = null;
 
 function pedirTasa(mensaje?: string, despues?: () => void) {
   $('tasa-dialog-msg').textContent =
-    mensaje ?? 'Ingresa el precio del dólar BCV de hoy para calcular los montos en bolívares.';
+    mensaje ?? 'Ingresa la tasa BCV de hoy del dólar, del euro o de ambos para calcular los montos en bolívares.';
   $('tasa-dialog-error').hidden = true;
-  const anterior = leerTasa();
-  dialogInput.value = anterior ? fmtNum.format(anterior.valor) : '';
+  for (const m of MONEDAS) {
+    const anterior = leerTasa(m);
+    dialogInputs[m].value = anterior ? fmtNum.format(anterior.valor) : '';
+  }
   alGuardarTasa = despues ?? null;
   dialog.showModal();
-  dialogInput.focus();
-  dialogInput.select();
+  dialogInputs.usd.focus();
+  dialogInputs.usd.select();
 }
 
 $<HTMLFormElement>('tasa-form').addEventListener('submit', (e) => {
-  const v = parseNumero(dialogInput.value);
-  if (!(v > 0)) {
+  const valores = MONEDAS.map((m) => {
+    const texto = dialogInputs[m].value.trim();
+    return [m, texto ? parseNumero(texto) : null] as const;
+  });
+  // Al menos una tasa, y las que se llenaron tienen que ser válidas
+  const invalida = valores.some(([, v]) => v !== null && !(v > 0));
+  if (invalida || valores.every(([, v]) => v === null)) {
     e.preventDefault();
     $('tasa-dialog-error').hidden = false;
     return;
   }
-  guardarTasa(v);
+  for (const [m, v] of valores) {
+    if (v === null) borrarTasa(m);
+    else guardarTasa(m, v);
+  }
   render();
   const cb = alGuardarTasa;
   alGuardarTasa = null;
@@ -362,20 +420,20 @@ $('tasa-luego').addEventListener('click', () => {
   dialog.close();
 });
 
-/** Ejecuta la acción solo si hay tasa de hoy; si no, la pide primero. */
-function conTasa(accion: (tasa: number) => void) {
-  const tasa = tasaDeHoy();
-  if (tasa) return accion(tasa);
+/** Ejecuta la acción solo si hay alguna tasa de hoy; si no, la pide primero. */
+function conTasa(accion: (t: Tasas) => void) {
+  const t = tasasDeHoy();
+  if (hayTasa(t)) return accion(t);
   pedirTasa('El recibo siempre muestra los montos en bolívares. Ingresa la tasa BCV de hoy para continuar.', () => {
-    const t = tasaDeHoy();
-    if (t) accion(t);
+    const nuevas = tasasDeHoy();
+    if (hayTasa(nuevas)) accion(nuevas);
   });
 }
 
 // Revisar al cargar y cuando la pestaña vuelve a estar visible (por si cambió el día)
 function revisarTasaDelDia() {
-  if (!tasaDeHoy() && !dialog.open) {
-    const anterior = leerTasa();
+  if (!hayTasa(tasasDeHoy()) && !dialog.open) {
+    const anterior = ultimaTasa();
     pedirTasa(
       anterior
         ? `La última tasa registrada fue del ${anterior.fecha.split('-').reverse().join('/')}. Ingresa la tasa BCV de hoy.`
@@ -465,26 +523,26 @@ $('cliente-borrar').addEventListener('click', () => {
 
 // ---------- Recibo: datos comunes ----------
 
-function datosRecibo(tasa: number) {
+function datosRecibo(t: Tasas) {
   const ahora = new Date();
   return {
     archivo: `recibo-${hoy()}-${String(ahora.getHours()).padStart(2, '0')}${String(ahora.getMinutes()).padStart(2, '0')}`,
     fecha: ahora.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }),
     hora: ahora.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
     cliente: filasCliente(),
-    tasa,
+    tasas: tasasAplicadas(t),
     lineas: lineas.map((l) => {
       const usd = centimos(l.precioUsd * l.cantidad) / 100;
-      return { ...l, usd, bs: aBs(usd, tasa) };
+      return { ...l, usd, bs: aBs(usd, tasaPara(categoriaDe(l), t)!) };
     }),
-    totales: totales(tasa) as { usd: number; bs: number },
+    totales: totales(t) as { usd: number; bs: number },
   };
 }
 
 // ---------- Imprimir ----------
 
-function imprimir(tasa: number) {
-  const r = datosRecibo(tasa);
+function imprimir(t: Tasas) {
+  const r = datosRecibo(t);
   const filas = r.lineas
     .map(
       (l) => `
@@ -505,7 +563,7 @@ function imprimir(tasa: number) {
       <table>
         <tr><td>Fecha</td><td class="r">${r.fecha} ${r.hora}</td></tr>
         ${r.cliente.map(([k, v]) => `<tr><td>${k}</td><td class="r wrap">${escapar(v)}</td></tr>`).join('')}
-        <tr><td>Tasa BCV</td><td class="r">${fmtBs(r.tasa)}</td></tr>
+        ${r.tasas.map(([k, v]) => `<tr><td>${k}</td><td class="r">${fmtBs(v)}</td></tr>`).join('')}
       </table>
       <hr>
       <table>${filas}</table>
@@ -552,8 +610,8 @@ async function cargarLogo(): Promise<string | null> {
   }
 }
 
-async function guardarPdf(tasa: number) {
-  const r = datosRecibo(tasa);
+async function guardarPdf(t: Tasas) {
+  const r = datosRecibo(t);
   const ancho = 80;
   const margen = 5;
   const util = ancho - margen * 2;
@@ -566,7 +624,7 @@ async function guardarPdf(tasa: number) {
   medir.setFont('courier', 'normal');
   const lineasCliente = r.cliente.map(([k, v]) => medir.splitTextToSize(`${k}: ${v}`, util) as string[]);
   const altoCliente = lineasCliente.reduce((a, l) => a + l.length * 3.8, 0);
-  const alto = Math.max(120, 95 + altoItems + altoCliente);
+  const alto = Math.max(120, 95 + altoItems + altoCliente + r.tasas.length * 3.8);
 
   const doc = new jsPDF({ unit: 'mm', format: [ancho, alto] });
   let y = margen;
@@ -605,7 +663,7 @@ async function guardarPdf(tasa: number) {
     doc.text(t, margen, y);
     y += 3.8;
   }
-  par('Tasa BCV', fmtBs(r.tasa));
+  for (const [k, v] of r.tasas) par(k, fmtBs(v));
   separador();
 
   r.lineas.forEach((l, i) => {

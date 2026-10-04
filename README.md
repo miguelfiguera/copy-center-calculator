@@ -3,8 +3,11 @@
 Calculadora para Speed Copy 3023, C.A. hecha con [Astro](https://astro.build) y desplegada en Netlify (SSR con `@astrojs/netlify`).
 
 - Login con usuario y clave definidos en `.env`, con una cookie de sesión firmada (12 h).
-- Precios en dólares, con conversión a bolívares según la **tasa BCV** del día.
-- La tasa se guarda en `localStorage` con la fecha. Si el día cambió, la app pide la tasa nueva.
+- Precios en dólares, con conversión a bolívares según la **tasa BCV del dólar** y/o la **tasa BCV del euro** del día:
+  - Si solo hay una tasa cargada, se usa esa para todos los productos.
+  - Si están las dos, la del euro se usa para la categoría **Papelería y útiles** y la del dólar para todo lo demás (incluidos los conceptos libres).
+  - Para quitar una tasa basta con dejar su campo vacío.
+- Las tasas se guardan en `localStorage` con la fecha. Si el día cambió, la app pide las tasas nuevas.
 - El recibo se puede imprimir (formato ticket de 80 mm) o guardar en PDF, y siempre muestra los montos en $ y en Bs.
 - Datos del cliente opcionales (nombre, apellido, cédula, teléfono y correo) que se cargan desde un modal. No se guardan en ningún lado y se borran al imprimir o al empezar una nueva venta.
 - Diseño oscuro, pensado primero para móviles.
@@ -18,7 +21,7 @@ Un service worker (`public/sw.js`) guarda una copia de la calculadora para cuand
 - Cerrar sesión también borra la copia.
 - La copia vence a los **5 días** sin abrir la app con internet (`MAX_OFFLINE_DAYS` en `public/sw.js`). Después de eso, hay que conectarse e iniciar sesión otra vez.
 - Cada vez que se abre con internet se carga la versión más reciente, que reemplaza a la copia anterior.
-- Sin conexión siguen funcionando la tasa BCV, el recibo, la impresión y el PDF. Lo único que no funciona es iniciar sesión.
+- Sin conexión siguen funcionando las tasas BCV, el recibo, la impresión y el PDF. Lo único que no funciona es iniciar sesión.
 - En el celular se puede instalar con "Agregar a pantalla de inicio".
 
 ## Configuración
