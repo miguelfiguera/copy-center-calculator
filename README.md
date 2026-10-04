@@ -31,7 +31,7 @@ npm run dev            # http://localhost:4321
 
 ## Despliegue en Netlify
 
-1. En Netlify: **Add new project → Import an existing project → GitHub** y elegir `TheDigitalLab-dev/copy-center-calculator`.
+1. En Netlify: **Add new project → Import an existing project → GitHub** y elegir `miguelfiguera/copy-center-calculator`.
 2. La configuración de build se toma de `netlify.toml` (`npm run build`, Node 22), así que no hay que cambiar nada.
 3. En **Project configuration → Environment variables**, agregar `AUTH_USER`, `AUTH_PASSWORD` y `AUTH_SECRET`. Para el secreto se puede generar una cadena aleatoria con `openssl rand -hex 32`.
 4. Hacer el deploy. Si después cambias las variables, hay que volver a desplegar.
