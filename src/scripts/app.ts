@@ -20,7 +20,6 @@ interface Datos {
 }
 
 const TASA_KEY = 'sc_tasa_bcv';
-const RECIBO_KEY = 'sc_recibo_num';
 const CARRITO_KEY = 'sc_carrito';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -102,15 +101,6 @@ function guardarCarrito() {
   localStorage.setItem(CARRITO_KEY, JSON.stringify(lineas));
 }
 
-function numeroRecibo(): number {
-  const n = Number(localStorage.getItem(RECIBO_KEY));
-  if (Number.isInteger(n) && n > 0) return n;
-  localStorage.setItem(RECIBO_KEY, '1');
-  return 1;
-}
-
-const numeroReciboTexto = () => String(numeroRecibo()).padStart(6, '0');
-
 function cantidadDe(id: string) {
   return lineas.find((l) => l.id === id)?.cantidad ?? 0;
 }
@@ -161,7 +151,7 @@ const escapar = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 function normalizar(s: string) {
-  return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
 function renderProductos(tasa: number | null) {
@@ -199,7 +189,6 @@ function renderProductos(tasa: number | null) {
 }
 
 function renderRecibo(tasa: number | null) {
-  $('recibo-num').textContent = `N° ${numeroReciboTexto()}`;
   $('recibo-fecha').textContent = new Date().toLocaleDateString('es-VE', {
     weekday: 'long',
     day: 'numeric',
@@ -406,15 +395,83 @@ const ticket = $('ticket');
 $('abrir-ticket').addEventListener('click', () => ticket.classList.add('open'));
 $('cerrar-ticket').addEventListener('click', () => ticket.classList.remove('open'));
 
+// ---------- Datos del cliente (solo en memoria, se borran al imprimir o en nueva venta) ----------
+
+interface Cliente {
+  nombre: string;
+  apellido: string;
+  cedula: string;
+  telefono: string;
+  correo: string;
+}
+
+const clienteVacio = (): Cliente => ({ nombre: '', apellido: '', cedula: '', telefono: '', correo: '' });
+let cliente = clienteVacio();
+
+/** Pares [etiqueta, valor] con los datos que el cliente llenó, en orden de impresión. */
+function filasCliente(): [string, string][] {
+  const nombreCompleto = `${cliente.nombre} ${cliente.apellido}`.trim();
+  const filas: [string, string][] = [
+    ['Cliente', nombreCompleto],
+    ['C.I.', cliente.cedula],
+    ['Teléfono', cliente.telefono],
+    ['Correo', cliente.correo],
+  ];
+  return filas.filter(([, v]) => v);
+}
+
+function renderCliente() {
+  const filas = filasCliente();
+  const resumen = $('cliente-resumen');
+  resumen.hidden = filas.length === 0;
+  resumen.innerHTML = filas.map(([k, v]) => `<dt>${k}</dt><dd>${escapar(v)}</dd>`).join('');
+  $('btn-cliente').textContent = filas.length ? 'Editar datos del cliente' : 'Agregar datos del cliente';
+}
+
+function borrarCliente() {
+  cliente = clienteVacio();
+  renderCliente();
+}
+
+const clienteDialog = $<HTMLDialogElement>('cliente-dialog');
+const clienteForm = $<HTMLFormElement>('cliente-form');
+
+$('btn-cliente').addEventListener('click', () => {
+  for (const [k, v] of Object.entries(cliente)) {
+    (clienteForm.elements.namedItem(k) as HTMLInputElement).value = v;
+  }
+  clienteDialog.showModal();
+});
+
+clienteForm.addEventListener('submit', () => {
+  const fd = new FormData(clienteForm);
+  const valor = (k: keyof Cliente) => String(fd.get(k) ?? '').trim();
+  cliente = {
+    nombre: valor('nombre'),
+    apellido: valor('apellido'),
+    cedula: valor('cedula').toUpperCase(),
+    telefono: valor('telefono'),
+    correo: valor('correo').toLowerCase(),
+  };
+  renderCliente();
+});
+
+$('cliente-cancelar').addEventListener('click', () => clienteDialog.close());
+$('cliente-borrar').addEventListener('click', () => {
+  clienteForm.reset();
+  borrarCliente();
+  clienteDialog.close();
+});
+
 // ---------- Recibo: datos comunes ----------
 
 function datosRecibo(tasa: number) {
   const ahora = new Date();
   return {
-    numero: numeroReciboTexto(),
+    archivo: `recibo-${hoy()}-${String(ahora.getHours()).padStart(2, '0')}${String(ahora.getMinutes()).padStart(2, '0')}`,
     fecha: ahora.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }),
     hora: ahora.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
-    cliente: $<HTMLInputElement>('cliente').value.trim(),
+    cliente: filasCliente(),
     tasa,
     lineas: lineas.map((l) => {
       const usd = centimos(l.precioUsd * l.cantidad) / 100;
@@ -446,9 +503,8 @@ function imprimir(tasa: number) {
       <div class="c">RIF ${escapar(datos.negocio.rif)}</div>
       <hr>
       <table>
-        <tr><td>Recibo N°</td><td class="r b">${r.numero}</td></tr>
         <tr><td>Fecha</td><td class="r">${r.fecha} ${r.hora}</td></tr>
-        ${r.cliente ? `<tr><td>Cliente</td><td class="r">${escapar(r.cliente)}</td></tr>` : ''}
+        ${r.cliente.map(([k, v]) => `<tr><td>${k}</td><td class="r wrap">${escapar(v)}</td></tr>`).join('')}
         <tr><td>Tasa BCV</td><td class="r">${fmtBs(r.tasa)}</td></tr>
       </table>
       <hr>
@@ -464,7 +520,11 @@ function imprimir(tasa: number) {
     </div>`;
 
   const img = $('print-area').querySelector('img')!;
-  const lanzar = () => window.print();
+  const lanzar = () => {
+    window.print();
+    // Los datos del cliente no se conservan después de imprimir
+    borrarCliente();
+  };
   if (img.complete) lanzar();
   else {
     img.onload = lanzar;
@@ -503,7 +563,10 @@ async function guardarPdf(tasa: number) {
   medir.setFont('courier', 'bold').setFontSize(8.5);
   const lineasNombre = r.lineas.map((l) => medir.splitTextToSize(l.nombre, util) as string[]);
   const altoItems = lineasNombre.reduce((a, n) => a + n.length * 3.6 + 8, 0);
-  const alto = Math.max(120, 95 + altoItems + (r.cliente ? 5 : 0));
+  medir.setFont('courier', 'normal');
+  const lineasCliente = r.cliente.map(([k, v]) => medir.splitTextToSize(`${k}: ${v}`, util) as string[]);
+  const altoCliente = lineasCliente.reduce((a, l) => a + l.length * 3.8, 0);
+  const alto = Math.max(120, 95 + altoItems + altoCliente);
 
   const doc = new jsPDF({ unit: 'mm', format: [ancho, alto] });
   let y = margen;
@@ -536,9 +599,12 @@ async function guardarPdf(tasa: number) {
   centro(datos.negocio.nombre, 10, 'bold');
   centro(`RIF ${datos.negocio.rif}`, 8.5);
   separador();
-  par('Recibo N°', r.numero, 8.5, 'bold');
   par('Fecha', `${r.fecha} ${r.hora}`);
-  if (r.cliente) par('Cliente', r.cliente.slice(0, 26));
+  doc.setFont('courier', 'normal').setFontSize(8.5);
+  for (const t of lineasCliente.flat()) {
+    doc.text(t, margen, y);
+    y += 3.8;
+  }
   par('Tasa BCV', fmtBs(r.tasa));
   separador();
 
@@ -561,7 +627,7 @@ async function guardarPdf(tasa: number) {
   centro('¡Gracias por su compra!', 8.5);
   centro('Documento no fiscal', 7.5);
 
-  doc.save(`recibo-${r.numero}.pdf`);
+  doc.save(`${r.archivo}.pdf`);
 }
 
 // ---------- Botones de acción ----------
@@ -571,11 +637,10 @@ $('btn-pdf').addEventListener('click', () => conTasa((t) => void guardarPdf(t)))
 $('btn-nueva').addEventListener('click', () => {
   lineas = [];
   guardarCarrito();
-  $<HTMLInputElement>('cliente').value = '';
-  localStorage.setItem(RECIBO_KEY, String(numeroRecibo() + 1));
+  borrarCliente();
   ticket.classList.remove('open');
   render();
-  toast(`Nueva venta: recibo N° ${numeroReciboTexto()}`);
+  toast('Nueva venta iniciada.');
 });
 
 // ---------- Utilidades ----------

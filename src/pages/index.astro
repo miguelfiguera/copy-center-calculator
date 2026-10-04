@@ -64,13 +64,16 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
     <aside class="ticket" id="ticket" aria-label="Recibo">
       <div class="ticket-head">
         <div>
-          <h2>Recibo <span id="recibo-num"></span></h2>
+          <h2>Recibo</h2>
           <small id="recibo-fecha"></small>
         </div>
         <button class="btn btn-ghost close-sheet" id="cerrar-ticket" aria-label="Cerrar recibo">✕</button>
       </div>
 
-      <input id="cliente" class="input" placeholder="Cliente (opcional)" autocomplete="off" />
+      <div class="cliente-box">
+        <dl id="cliente-resumen" class="cliente-resumen" hidden></dl>
+        <button class="btn" id="btn-cliente" type="button">Agregar datos del cliente</button>
+      </div>
 
       <ul id="lineas" class="lineas"></ul>
       <p id="vacio" class="vacio">Agrega productos desde la lista.</p>
@@ -116,6 +119,40 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
       <div class="dialog-actions">
         <button class="btn btn-ghost" type="button" id="tasa-luego">Más tarde</button>
         <button class="btn btn-primary" type="submit">Guardar tasa</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="cliente-dialog" class="dialog">
+    <form id="cliente-form" method="dialog" class="cliente-form">
+      <h2>Datos del cliente</h2>
+      <div class="campos">
+        <label>
+          <span>Nombre</span>
+          <input class="input" name="nombre" autocomplete="off" autocapitalize="words" />
+        </label>
+        <label>
+          <span>Apellido</span>
+          <input class="input" name="apellido" autocomplete="off" autocapitalize="words" />
+        </label>
+        <label>
+          <span>Cédula</span>
+          <input class="input" name="cedula" autocomplete="off" placeholder="V-12345678" />
+        </label>
+        <label>
+          <span>Teléfono</span>
+          <input class="input" name="telefono" type="tel" inputmode="tel" autocomplete="off" placeholder="0414-1234567" />
+        </label>
+        <label class="ancho">
+          <span>Correo</span>
+          <input class="input" name="correo" type="email" inputmode="email" autocomplete="off" placeholder="cliente@correo.com" />
+        </label>
+      </div>
+      <div class="dialog-actions">
+        <button class="btn btn-ghost btn-danger" type="button" id="cliente-borrar">Borrar</button>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost" type="button" id="cliente-cancelar">Cancelar</button>
+        <button class="btn btn-primary" type="submit">Guardar</button>
       </div>
     </form>
   </dialog>
@@ -447,7 +484,7 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
   }
 
   .dialog {
-    width: min(92vw, 400px);
+    width: min(92vw, 440px);
     padding: 1.25rem;
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -486,6 +523,63 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
 
   .print-area {
     display: none;
+  }
+
+  .cliente-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .cliente-resumen {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.2rem 0.75rem;
+    margin: 0;
+    padding: 0.6rem 0.75rem;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 0.85rem;
+  }
+
+  .cliente-resumen :global(dt) {
+    color: var(--muted);
+  }
+
+  .cliente-resumen :global(dd) {
+    margin: 0;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+
+  .cliente-form .campos {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .cliente-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    min-width: 0;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+
+  .cliente-form .ancho {
+    grid-column: 1 / -1;
+  }
+
+  .cliente-form .spacer {
+    flex: 1;
+  }
+
+  @media (max-width: 420px) {
+    .cliente-form .campos {
+      grid-template-columns: 1fr;
+    }
   }
 
   @media (max-width: 480px) {
@@ -761,6 +855,12 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
   .recibo td.r {
     text-align: right;
     white-space: nowrap;
+  }
+
+  .recibo td.wrap {
+    padding-left: 6px;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .recibo .item-sub {
