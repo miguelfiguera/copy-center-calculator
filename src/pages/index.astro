@@ -1,0 +1,775 @@
+---
+import Layout from '../layouts/Layout.astro';
+import precios from '../data/precios.json';
+
+const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
+---
+
+<Layout>
+  <header class="topbar">
+    <div class="brand">
+      <img src="/logo.jpeg" alt="Speed Copy" width="64" height="48" />
+      <div>
+        <strong>Speed Copy</strong>
+        <small>Calculadora</small>
+      </div>
+    </div>
+
+    <div class="tasa">
+      <label for="tasa-input">Tasa BCV</label>
+      <div class="tasa-field">
+        <span>Bs</span>
+        <input
+          id="tasa-input"
+          class="input"
+          type="text"
+          inputmode="decimal"
+          placeholder="0,00"
+          autocomplete="off"
+        />
+      </div>
+      <small id="tasa-fecha" class="tasa-fecha">Sin tasa para hoy</small>
+    </div>
+
+    <form method="post" action="/api/logout">
+      <button class="btn btn-ghost logout" type="submit" title="Cerrar sesión" aria-label="Cerrar sesión">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+      </button>
+    </form>
+  </header>
+  <div class="cmyk-bar"></div>
+
+  <main class="app">
+    <section class="catalog" aria-label="Productos y servicios">
+      <div class="filters">
+        <input id="buscar" class="input" type="search" placeholder="Buscar producto o servicio…" autocomplete="off" />
+        <div class="chips" id="chips">
+          <button class="chip active" data-cat="">Todos</button>
+          {categorias.map((c) => <button class="chip" data-cat={c}>{c}</button>)}
+        </div>
+      </div>
+
+      <ul id="productos" class="productos"></ul>
+
+      <details class="libre">
+        <summary>+ Agregar concepto libre</summary>
+        <form id="libre-form">
+          <input class="input" name="nombre" placeholder="Descripción" required />
+          <input class="input" name="precio" inputmode="decimal" placeholder="Precio $" required />
+          <button class="btn btn-primary" type="submit">Agregar</button>
+        </form>
+      </details>
+    </section>
+
+    <aside class="ticket" id="ticket" aria-label="Recibo">
+      <div class="ticket-head">
+        <div>
+          <h2>Recibo <span id="recibo-num"></span></h2>
+          <small id="recibo-fecha"></small>
+        </div>
+        <button class="btn btn-ghost close-sheet" id="cerrar-ticket" aria-label="Cerrar recibo">✕</button>
+      </div>
+
+      <input id="cliente" class="input" placeholder="Cliente (opcional)" autocomplete="off" />
+
+      <ul id="lineas" class="lineas"></ul>
+      <p id="vacio" class="vacio">Agrega productos desde la lista.</p>
+
+      <div class="totales">
+        <div class="total-row">
+          <span>Total USD</span>
+          <strong id="total-usd">$0,00</strong>
+        </div>
+        <div class="total-row bs">
+          <span>Total Bs</span>
+          <strong id="total-bs">—</strong>
+        </div>
+        <small id="tasa-aplicada" class="tasa-aplicada"></small>
+      </div>
+
+      <div class="acciones">
+        <button class="btn btn-primary" id="btn-imprimir">Imprimir</button>
+        <button class="btn" id="btn-pdf">Guardar PDF</button>
+        <button class="btn btn-ghost btn-danger" id="btn-nueva">Nueva venta</button>
+      </div>
+    </aside>
+  </main>
+
+  <button class="mobile-bar" id="abrir-ticket">
+    <span class="mb-count" id="mb-count">0</span>
+    <span class="mb-totals">
+      <strong id="mb-usd">$0,00</strong>
+      <small id="mb-bs">Bs —</small>
+    </span>
+    <span class="mb-cta">Ver recibo →</span>
+  </button>
+
+  <dialog id="tasa-dialog" class="dialog">
+    <form id="tasa-form" method="dialog">
+      <h2>Tasa BCV del día</h2>
+      <p id="tasa-dialog-msg">Ingresa el precio del dólar BCV de hoy para calcular los montos en bolívares.</p>
+      <div class="tasa-field big">
+        <span>Bs</span>
+        <input id="tasa-dialog-input" class="input" inputmode="decimal" placeholder="0,00" autocomplete="off" required />
+      </div>
+      <p class="dialog-error" id="tasa-dialog-error" hidden>Ingresa una tasa válida mayor a 0.</p>
+      <div class="dialog-actions">
+        <button class="btn btn-ghost" type="button" id="tasa-luego">Más tarde</button>
+        <button class="btn btn-primary" type="submit">Guardar tasa</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="print-area" class="print-area" aria-hidden="true"></div>
+
+  <script type="application/json" id="precios-data" set:html={JSON.stringify(precios)} />
+</Layout>
+
+<script>
+  import '../scripts/app';
+</script>
+
+<style>
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 1rem;
+    padding-top: max(0.6rem, env(safe-area-inset-top));
+    background: rgba(7, 9, 13, 0.92);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-right: auto;
+    min-width: 0;
+  }
+
+  .brand img {
+    width: 52px;
+    height: 39px;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+
+  .brand div {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.1;
+  }
+
+  .brand small {
+    color: var(--muted);
+    font-size: 0.75rem;
+  }
+
+  .tasa {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    column-gap: 0.5rem;
+  }
+
+  .tasa label {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--yellow);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .tasa-fecha {
+    grid-column: 1 / -1;
+    text-align: right;
+    font-size: 0.7rem;
+    color: var(--muted);
+  }
+
+  .tasa-fecha.warn {
+    color: var(--danger);
+  }
+
+  .tasa-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .tasa-field span {
+    position: absolute;
+    left: 0.7rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+    pointer-events: none;
+  }
+
+  .tasa-field .input {
+    width: 8.5rem;
+    padding: 0.5rem 0.6rem 0.5rem 2rem;
+    text-align: right;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .tasa-field.big .input {
+    width: 100%;
+    font-size: 1.4rem;
+    padding: 0.8rem 0.8rem 0.8rem 2.6rem;
+  }
+
+  .tasa-field.big span {
+    font-size: 1.1rem;
+    left: 0.9rem;
+  }
+
+  .logout {
+    padding: 0.55rem;
+    color: var(--muted);
+  }
+
+  .app {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1rem 1rem 6.5rem;
+  }
+
+  .filters {
+    position: sticky;
+    top: 4.4rem;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 0.25rem 0 0.75rem;
+    background: var(--bg);
+  }
+
+  .chips {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .chip {
+    flex: none;
+    padding: 0.45rem 0.85rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  .chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .productos {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .libre {
+    margin-top: 1rem;
+    padding: 0.85rem 1rem;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    color: var(--muted);
+  }
+
+  .libre summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .libre form {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+  }
+
+  .ticket {
+    position: fixed;
+    inset: auto 0 0 0;
+    z-index: 40;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    max-height: 88dvh;
+    padding: 1rem 1rem max(1rem, env(safe-area-inset-bottom));
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -20px 40px rgba(0, 0, 0, 0.6);
+    transform: translateY(105%);
+    transition: transform 0.25s ease;
+  }
+
+  .ticket.open {
+    transform: translateY(0);
+  }
+
+  .ticket-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .ticket-head h2 {
+    margin: 0;
+    font-size: 1.15rem;
+  }
+
+  .ticket-head small {
+    color: var(--muted);
+  }
+
+  .close-sheet {
+    padding: 0.4rem 0.7rem;
+  }
+
+  .lineas {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .vacio {
+    margin: 0;
+    padding: 1.5rem 0;
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
+  .totales {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .total-row strong {
+    font-size: 1.4rem;
+  }
+
+  .total-row.bs strong {
+    color: var(--yellow);
+  }
+
+  .tasa-aplicada {
+    color: var(--muted);
+    text-align: right;
+  }
+
+  .acciones {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .acciones #btn-nueva {
+    grid-column: 1 / -1;
+  }
+
+  .mobile-bar {
+    position: fixed;
+    inset: auto 0.75rem max(0.75rem, env(safe-area-inset-bottom)) 0.75rem;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 1rem;
+    border: none;
+    border-radius: var(--radius);
+    background: linear-gradient(180deg, var(--accent), var(--accent-2));
+    color: #fff;
+    box-shadow: var(--shadow);
+    text-align: left;
+  }
+
+  .mb-count {
+    display: grid;
+    place-items: center;
+    min-width: 2rem;
+    height: 2rem;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.3);
+    font-weight: 700;
+  }
+
+  .mb-totals {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.15;
+    margin-right: auto;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .mb-totals small {
+    opacity: 0.85;
+  }
+
+  .mb-cta {
+    font-weight: 600;
+  }
+
+  .dialog {
+    width: min(92vw, 400px);
+    padding: 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: var(--shadow);
+  }
+
+  .dialog::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(3px);
+  }
+
+  .dialog h2 {
+    margin: 0 0 0.5rem;
+    color: var(--yellow);
+  }
+
+  .dialog p {
+    margin: 0 0 1rem;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+
+  .dialog-error {
+    margin-top: 0.5rem !important;
+    color: var(--danger) !important;
+  }
+
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 1rem;
+  }
+
+  .print-area {
+    display: none;
+  }
+
+  @media (max-width: 480px) {
+    .brand div {
+      display: none;
+    }
+
+    .tasa-field .input {
+      width: 7.5rem;
+    }
+  }
+
+  @media (min-width: 900px) {
+    .app {
+      grid-template-columns: minmax(0, 1fr) 380px;
+      align-items: start;
+      padding-bottom: 2rem;
+    }
+
+    .ticket {
+      position: sticky;
+      top: 5.5rem;
+      inset: auto;
+      max-height: calc(100dvh - 7rem);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      transform: none;
+      transition: none;
+    }
+
+    .close-sheet,
+    .mobile-bar {
+      display: none;
+    }
+
+    .libre form {
+      grid-template-columns: 1fr 140px auto;
+    }
+  }
+
+  @media print {
+    @page {
+      margin: 8mm;
+    }
+
+    :global(html),
+    :global(body) {
+      background: #fff !important;
+      color: #000 !important;
+    }
+
+    :global(body > *:not(.print-area)) {
+      display: none !important;
+    }
+
+    .print-area {
+      display: block !important;
+    }
+  }
+</style>
+
+<style is:global>
+  /* Elementos renderizados desde el script del cliente */
+  .producto {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.7rem 0.8rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .producto.en-recibo {
+    border-color: rgba(30, 144, 255, 0.6);
+    background: linear-gradient(90deg, rgba(30, 144, 255, 0.1), var(--surface) 60%);
+  }
+
+  .producto.sin-precio {
+    opacity: 0.45;
+  }
+
+  .producto-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .producto-nombre {
+    display: block;
+    font-weight: 600;
+    font-size: 0.92rem;
+    overflow-wrap: anywhere;
+  }
+
+  .producto-precio {
+    display: flex;
+    gap: 0.6rem;
+    font-size: 0.82rem;
+    font-variant-numeric: tabular-nums;
+    margin-top: 0.15rem;
+  }
+
+  .producto-precio .usd {
+    color: var(--cyan);
+    font-weight: 700;
+  }
+
+  .producto-precio .bs {
+    color: var(--muted);
+  }
+
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex: none;
+  }
+
+  .stepper button {
+    width: 2.4rem;
+    height: 2.4rem;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    font-size: 1.2rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  .stepper button.mas {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+  }
+
+  .stepper input {
+    width: 3.2rem;
+    height: 2.4rem;
+    text-align: center;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    -moz-appearance: textfield;
+  }
+
+  .stepper input::-webkit-outer-spin-button,
+  .stepper input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .linea {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.15rem 0.5rem;
+    padding: 0.55rem 0.7rem;
+    background: var(--surface-2);
+    border-radius: 10px;
+    font-size: 0.88rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .linea-nombre {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .linea-total {
+    text-align: right;
+    font-weight: 700;
+  }
+
+  .linea-detalle {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .linea-bs {
+    text-align: right;
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+
+  .linea .stepper {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+    margin-top: 0.25rem;
+  }
+
+  .linea .stepper button,
+  .linea .stepper input {
+    width: 2rem;
+    height: 2rem;
+    font-size: 1rem;
+  }
+
+  .linea .stepper input {
+    width: 2.8rem;
+  }
+
+  .linea .stepper .quitar {
+    margin-right: auto;
+    width: auto;
+    padding: 0 0.6rem;
+    color: var(--danger);
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .sin-resultados {
+    padding: 2rem 0;
+    text-align: center;
+    color: var(--muted);
+  }
+
+  .toast {
+    position: fixed;
+    left: 50%;
+    top: 5rem;
+    z-index: 100;
+    transform: translateX(-50%);
+    padding: 0.6rem 1rem;
+    border-radius: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+    font-size: 0.9rem;
+  }
+
+  /* Recibo impreso */
+  .recibo {
+    width: 72mm;
+    margin: 0 auto;
+    color: #000;
+    font-family: 'Courier New', ui-monospace, monospace;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .recibo img {
+    display: block;
+    width: 40mm;
+    margin: 0 auto 4px;
+  }
+
+  .recibo .c {
+    text-align: center;
+  }
+
+  .recibo .b {
+    font-weight: 700;
+  }
+
+  .recibo hr {
+    border: none;
+    border-top: 1px dashed #000;
+    margin: 6px 0;
+  }
+
+  .recibo table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .recibo td {
+    padding: 1px 0;
+    vertical-align: top;
+  }
+
+  .recibo td.r {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .recibo .item-sub {
+    color: #333;
+    font-size: 10px;
+  }
+
+  .recibo .total td {
+    font-size: 13px;
+    font-weight: 700;
+  }
+</style>
