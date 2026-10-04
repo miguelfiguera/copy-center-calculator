@@ -8,6 +8,18 @@ Calculadora para Speed Copy 3023, C.A. hecha con [Astro](https://astro.build) y 
 - El recibo se puede imprimir (formato ticket de 80 mm) o guardar en PDF, y siempre muestra los montos en $ y en Bs.
 - Datos del cliente opcionales (nombre, apellido, cédula, teléfono y correo) que se cargan desde un modal. No se guardan en ningún lado y se borran al imprimir o al empezar una nueva venta.
 - Diseño oscuro, pensado primero para móviles.
+- Funciona sin conexión (PWA): ver abajo.
+
+## Uso sin conexión
+
+Un service worker (`public/sw.js`) guarda una copia de la calculadora para cuando no hay internet:
+
+- La copia solo se guarda cuando la página se abre con una sesión válida. Si el servidor redirige al login, la copia se borra.
+- Cerrar sesión también borra la copia.
+- La copia vence a los **5 días** sin abrir la app con internet (`MAX_OFFLINE_DAYS` en `public/sw.js`). Después de eso, hay que conectarse e iniciar sesión otra vez.
+- Cada vez que se abre con internet se carga la versión más reciente, que reemplaza a la copia anterior.
+- Sin conexión siguen funcionando la tasa BCV, el recibo, la impresión y el PDF. Lo único que no funciona es iniciar sesión.
+- En el celular se puede instalar con "Agregar a pantalla de inicio".
 
 ## Configuración
 

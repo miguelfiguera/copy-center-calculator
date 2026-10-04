@@ -643,6 +643,39 @@ $('btn-nueva').addEventListener('click', () => {
   toast('Nueva venta iniciada.');
 });
 
+// ---------- Sin conexión (service worker) ----------
+
+const PAGE_CACHE = 'sc-pagina-v1';
+
+function renderConexion() {
+  $('sin-conexion').hidden = navigator.onLine;
+}
+window.addEventListener('online', renderConexion);
+window.addEventListener('offline', renderConexion);
+renderConexion();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', async () => {
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+      const sw = (await navigator.serviceWorker.ready).active;
+      // Enviar los recursos cargados para que queden guardados y se limpien los de versiones viejas
+      const urls = performance.getEntriesByType('resource').map((e) => e.name);
+      sw?.postMessage({ tipo: 'recursos', urls });
+    } catch (err) {
+      console.warn('No se pudo registrar el service worker', err);
+    }
+  });
+}
+
+// Al cerrar sesión se borra la copia guardada para uso sin conexión
+$<HTMLFormElement>('logout-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target as HTMLFormElement;
+  if ('caches' in window) await caches.delete(PAGE_CACHE).catch(() => {});
+  form.submit();
+});
+
 // ---------- Utilidades ----------
 
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
