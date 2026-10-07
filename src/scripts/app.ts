@@ -262,7 +262,7 @@ function renderRecibo(t: Tasas) {
   $('mb-bs').textContent = tot.bs !== null ? fmtBs(tot.bs) : 'Bs — (falta tasa)';
 
   const vacio = lineas.length === 0;
-  for (const id of ['btn-imprimir', 'btn-pdf', 'btn-nueva']) $<HTMLButtonElement>(id).disabled = vacio;
+  for (const id of ['btn-pdf', 'btn-guardar', 'btn-nueva']) $<HTMLButtonElement>(id).disabled = vacio;
 }
 
 function renderTasa(t: Tasas) {
@@ -456,12 +456,12 @@ const ticket = $('ticket');
 $('abrir-ticket').addEventListener('click', () => ticket.classList.add('open'));
 $('cerrar-ticket').addEventListener('click', () => ticket.classList.remove('open'));
 
-// ---------- Datos del cliente (solo en memoria, se borran al imprimir o en nueva venta) ----------
+// ---------- Datos del cliente (solo en memoria, se borran al guardar la venta o en nueva venta) ----------
 
 const clienteVacio = (): Cliente => ({ nombre: '', apellido: '', cedula: '', telefono: '', correo: '' });
 let cliente = clienteVacio();
 
-/** Pares [etiqueta, valor] con los datos que el cliente llenó, en orden de impresión. */
+/** Pares [etiqueta, valor] con los datos que el cliente llenó, en el orden del recibo. */
 function filasCliente(): [string, string][] {
   const nombreCompleto = `${cliente.nombre} ${cliente.apellido}`.trim();
   const filas: [string, string][] = [
@@ -537,14 +537,15 @@ function datosRecibo(t: Tasas) {
 
 // ---------- Registro de la venta en Firestore ----------
 
-/** Firma del recibo registrado por última vez, para no guardar dos veces la misma venta al reimprimir. */
+/** Firma del recibo registrado por última vez, para no guardar dos veces la misma venta (PDF + Guardar venta). */
 let firmaRegistrada: string | null = null;
 
 const firmaActual = () => JSON.stringify({ lineas, cliente });
 
-function registrarVentaActual(t: Tasas, origen: 'impresion' | 'pdf') {
+/** Devuelve false si esta venta ya estaba registrada. */
+function registrarVentaActual(t: Tasas, origen: 'pdf' | 'venta'): boolean {
   const firma = firmaActual();
-  if (firma === firmaRegistrada) return;
+  if (firma === firmaRegistrada) return false;
   const r = datosRecibo(t);
   const lineasVenta: VentaLinea[] = r.lineas.map((l) => ({
     id: l.id,
@@ -573,59 +574,7 @@ function registrarVentaActual(t: Tasas, origen: 'impresion' | 'pdf') {
     toast('La venta no se pudo guardar en el historial.', 4000);
   });
   toast(navigator.onLine ? 'Venta registrada.' : 'Venta guardada; se enviará cuando haya internet.', 3000);
-}
-
-// ---------- Imprimir ----------
-
-function imprimir(t: Tasas) {
-  const r = datosRecibo(t);
-  registrarVentaActual(t, 'impresion');
-  const filas = r.lineas
-    .map(
-      (l) => `
-      <tr><td colspan="2" class="b">${escapar(l.nombre)}</td></tr>
-      <tr class="item-sub">
-        <td>${l.cantidad} × ${fmtUsd(l.precioUsd)}</td>
-        <td class="r">${fmtUsd(l.usd)}<br>${fmtBs(l.bs)}</td>
-      </tr>`,
-    )
-    .join('');
-
-  $('print-area').innerHTML = `
-    <div class="recibo">
-      <img src="/logo.jpeg" alt="">
-      <div class="c b">${escapar(NEGOCIO.nombre)}</div>
-      <div class="c">RIF ${escapar(NEGOCIO.rif)}</div>
-      <hr>
-      <table>
-        <tr><td>Fecha</td><td class="r">${r.fecha} ${r.hora}</td></tr>
-        <tr><td>Atiende</td><td class="r wrap">${escapar(r.atiende)}</td></tr>
-        ${r.cliente.map(([k, v]) => `<tr><td>${k}</td><td class="r wrap">${escapar(v)}</td></tr>`).join('')}
-        ${r.tasas.map(([k, v]) => `<tr><td>${k}</td><td class="r">${fmtBs(v)}</td></tr>`).join('')}
-      </table>
-      <hr>
-      <table>${filas}</table>
-      <hr>
-      <table>
-        <tr class="total"><td>TOTAL $</td><td class="r">${fmtUsd(r.totales.usd)}</td></tr>
-        <tr class="total"><td>TOTAL Bs</td><td class="r">${fmtBs(r.totales.bs)}</td></tr>
-      </table>
-      <hr>
-      <div class="c">¡Gracias por su compra!</div>
-      <div class="c item-sub">Documento no fiscal</div>
-    </div>`;
-
-  const img = $('print-area').querySelector('img')!;
-  const lanzar = () => {
-    window.print();
-    // Los datos del cliente no se conservan después de imprimir
-    borrarCliente();
-  };
-  if (img.complete) lanzar();
-  else {
-    img.onload = lanzar;
-    img.onerror = lanzar;
-  }
+  return true;
 }
 
 // ---------- PDF ----------
@@ -730,17 +679,25 @@ async function guardarPdf(t: Tasas) {
 
 // ---------- Botones de acción ----------
 
-$('btn-imprimir').addEventListener('click', () => conTasa(imprimir));
-$('btn-pdf').addEventListener('click', () => conTasa((t) => void guardarPdf(t)));
-$('btn-nueva').addEventListener('click', () => {
+function nuevaVenta(aviso?: string) {
   lineas = [];
   firmaRegistrada = null;
   guardarCarrito();
   borrarCliente();
   ticket.classList.remove('open');
   render();
-  toast('Nueva venta iniciada.');
-});
+  if (aviso) toast(aviso);
+}
+
+/** Registra la venta y deja el recibo listo para la siguiente. Si ya se registró con el PDF, solo limpia. */
+function guardarVenta(t: Tasas) {
+  const registrada = registrarVentaActual(t, 'venta');
+  nuevaVenta(registrada ? undefined : 'La venta ya estaba registrada.');
+}
+
+$('btn-pdf').addEventListener('click', () => conTasa((t) => void guardarPdf(t)));
+$('btn-guardar').addEventListener('click', () => conTasa(guardarVenta));
+$('btn-nueva').addEventListener('click', () => nuevaVenta('Nueva venta iniciada.'));
 
 // ---------- Sin conexión (service worker) ----------
 

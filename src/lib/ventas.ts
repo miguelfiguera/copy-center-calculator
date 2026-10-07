@@ -44,7 +44,8 @@ export interface Venta {
   lineas: VentaLinea[];
   totalUsd: number;
   totalBs: number;
-  origen: 'impresion' | 'pdf';
+  /** Cómo se registró: con el PDF, con el botón Guardar venta, o impresa (versiones anteriores). */
+  origen: 'pdf' | 'venta' | 'impresion';
 }
 
 export type VentaNueva = Omit<Venta, 'id' | 'fechaLocal' | 'dia'>;
@@ -92,7 +93,7 @@ export async function buscarVentas(f: FiltroVentas): Promise<Venta[]> {
       lineas: Array.isArray(x.lineas) ? x.lineas : [],
       totalUsd: Number(x.totalUsd ?? 0),
       totalBs: Number(x.totalBs ?? 0),
-      origen: x.origen === 'pdf' ? 'pdf' : 'impresion',
+      origen: x.origen === 'pdf' ? 'pdf' : x.origen === 'impresion' ? 'impresion' : 'venta',
     } satisfies Venta;
   });
   return lista.sort((a, b) => b.fechaLocal.getTime() - a.fechaLocal.getTime());

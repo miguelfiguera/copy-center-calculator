@@ -131,7 +131,7 @@ function detalleHtml(v: Venta) {
       <div class="meta">
         ${cliente ? `<span>Cliente: ${escapar(cliente)}</span>` : ''}
         ${tasas.map((t) => `<span>${t}</span>`).join('')}
-        <span>Recibo: ${v.origen === 'pdf' ? 'PDF' : 'impreso'}</span>
+        <span>Recibo: ${v.origen === 'pdf' ? 'PDF' : v.origen === 'impresion' ? 'impreso' : 'sin PDF'}</span>
         <span>Ref. ${v.id.slice(0, 8)}</span>
       </div>
       ${sesion.esAdmin ? `<div class="acciones-detalle"><button class="btn btn-ghost btn-danger" data-eliminar="${v.id}">Eliminar venta</button></div>` : ''}
@@ -194,7 +194,7 @@ btnCsv.addEventListener('click', () => {
       fmtNum.format(v.totalBs),
       v.tasas.usd ? fmtNum.format(v.tasas.usd) : '',
       v.tasas.eur ? fmtNum.format(v.tasas.eur) : '',
-      v.origen === 'pdf' ? 'PDF' : 'Impreso',
+      v.origen === 'pdf' ? 'PDF' : v.origen === 'impresion' ? 'Impreso' : 'Sin PDF',
       v.id,
     ]
       .map(csvCelda)

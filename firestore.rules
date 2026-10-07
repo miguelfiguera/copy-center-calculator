@@ -54,7 +54,7 @@ service cloud.firestore {
         && d.totalUsd is number && d.totalUsd >= 0
         && d.totalBs is number && d.totalBs >= 0
         && d.tasas is map
-        && d.origen in ['impresion', 'pdf']
+        && d.origen in ['pdf', 'venta']
         && (d.cliente == null || d.cliente is map);
     }
 

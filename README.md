@@ -6,15 +6,15 @@ Calculadora y registro de ventas para Speed Copy 3023, C.A. Hecha con [Astro](ht
   - *Vendedor*: usa la calculadora y ve sus propias ventas.
   - *Administrador*: además gestiona productos, usuarios y ve todas las ventas.
 - **Catálogo en Firestore**: los administradores agregan, editan y eliminan productos desde la app (uno a uno o varios a la vez), o importan la lista de precios desde Excel o CSV.
-- **Registro de ventas**: al imprimir o guardar el PDF de un recibo, la venta queda guardada con sus líneas, montos en $ y Bs, tasas usadas, datos del cliente y quién la atendió. Reimprimir el mismo recibo no la duplica.
+- **Registro de ventas**: con **Guardar venta** (o al guardar el PDF del recibo) la venta queda guardada con sus líneas, montos en $ y Bs, tasas usadas, datos del cliente y quién la atendió. Guardar el PDF y luego la venta no la duplica.
 - **Historial de ventas**: por rango de fechas (hoy, ayer, semana, mes) y por vendedor, con totales y exportación a CSV para cuadrar con las facturas.
 - Precios en dólares, con conversión a bolívares según la **tasa BCV del dólar** y/o la **tasa BCV del euro** del día:
   - Si solo hay una tasa cargada, se usa esa para todos los productos.
   - Si están las dos, la del euro se usa para la categoría **Papelería y útiles** y la del dólar para todo lo demás (incluidos los conceptos libres).
   - Para quitar una tasa basta con dejar su campo vacío.
 - Las tasas se guardan en `localStorage` con la fecha. Si el día cambió, la app pide las tasas nuevas.
-- El recibo se puede imprimir (formato ticket de 80 mm) o guardar en PDF, y siempre muestra los montos en $ y en Bs.
-- Datos del cliente opcionales (nombre, apellido, cédula, teléfono y correo) que se cargan desde un modal y se borran al imprimir o al empezar una nueva venta.
+- El recibo se puede guardar en PDF (formato ticket de 80 mm) y siempre muestra los montos en $ y en Bs.
+- Datos del cliente opcionales (nombre, apellido, cédula, teléfono y correo) que se cargan desde un modal y se borran al guardar la venta o al empezar una nueva.
 - Diseño oscuro, pensado primero para móviles.
 - Funciona sin conexión (PWA): ver abajo.
 
