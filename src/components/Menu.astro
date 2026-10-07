@@ -1,0 +1,44 @@
+---
+// Menú de navegación. Lo rellena `montarMenu` (src/lib/sesion.ts) cuando hay sesión.
+---
+
+<div class="menu">
+  <button class="btn btn-ghost menu-btn" id="menu-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Menú">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="17" x2="20" y2="17"></line></svg>
+  </button>
+  <nav class="menu-panel" id="menu-panel" hidden>
+    <div class="menu-user">
+      <strong id="menu-nombre"></strong>
+      <small id="menu-rol"></small>
+    </div>
+    <a class="menu-item" href="/">Calculadora</a>
+    <a class="menu-item" href="/ventas">Ventas</a>
+    <a class="menu-item" href="/productos" data-admin hidden>Productos</a>
+    <a class="menu-item" href="/usuarios" data-admin hidden>Usuarios</a>
+    <button class="menu-item" id="menu-clave" type="button">Cambiar mi clave</button>
+    <button class="menu-item danger" id="menu-salir" type="button">Cerrar sesión</button>
+  </nav>
+</div>
+
+<dialog id="clave-dialog" class="dialog">
+  <form id="clave-form" class="form-campos">
+    <h2>Cambiar mi clave</h2>
+    <label>
+      <span>Clave actual</span>
+      <input class="input" name="actual" type="password" autocomplete="current-password" required />
+    </label>
+    <label>
+      <span>Clave nueva</span>
+      <input class="input" name="nueva" type="password" autocomplete="new-password" minlength="6" required />
+    </label>
+    <label>
+      <span>Repetir clave nueva</span>
+      <input class="input" name="repetir" type="password" autocomplete="new-password" minlength="6" required />
+    </label>
+    <p class="dialog-error" id="clave-error" hidden></p>
+    <div class="dialog-actions">
+      <button class="btn btn-ghost" type="button" id="clave-cancelar">Cancelar</button>
+      <button class="btn btn-primary" type="submit">Guardar</button>
+    </div>
+  </form>
+</dialog>

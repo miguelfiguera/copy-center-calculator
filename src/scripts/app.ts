@@ -1,11 +1,19 @@
 import { jsPDF } from 'jspdf';
-
-interface Producto {
-  id: string;
-  nombre: string;
-  categoria: string;
-  precioUsd: number;
-}
+import { CATEGORIA_EURO, NEGOCIO, suscribirProductos, type Producto } from '../lib/catalogo';
+import {
+  $,
+  centimos,
+  escapar,
+  fmtBs,
+  fmtNum,
+  fmtUsd,
+  hoy,
+  normalizar,
+  parseNumero,
+  toast,
+} from '../lib/formato';
+import { PAGE_CACHE, requerirSesion, type Sesion } from '../lib/sesion';
+import { registrarVenta, type Cliente, type VentaLinea } from '../lib/ventas';
 
 interface Linea {
   id: string;
@@ -15,49 +23,38 @@ interface Linea {
   cantidad: number;
 }
 
-interface Datos {
-  negocio: { nombre: string; rif: string };
-  productos: Producto[];
-}
-
 type Moneda = 'usd' | 'eur';
 const MONEDAS: Moneda[] = ['usd', 'eur'];
 const TASA_KEYS: Record<Moneda, string> = { usd: 'sc_tasa_bcv', eur: 'sc_tasa_eur' };
-/** Con las dos tasas cargadas, esta categoría se cobra con el euro y el resto con el dólar. */
-const CATEGORIA_EURO = 'Papelería y útiles';
 const CARRITO_KEY = 'sc_carrito';
 
-const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+// ---------- Catálogo (Firestore, con caché para uso sin conexión) ----------
 
-const datos: Datos = JSON.parse($('precios-data').textContent || '{}');
-const productos = datos.productos;
-const porId = new Map(productos.map((p) => [p.id, p]));
+let productos: Producto[] = [];
+let porId = new Map<string, Producto>();
+let sesion: Sesion;
 
-// ---------- Formato y cálculos (en céntimos para evitar errores de redondeo) ----------
-
-const fmtNum = new Intl.NumberFormat('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtUsd = (n: number) => `$${fmtNum.format(n)}`;
-const fmtBs = (n: number) => `Bs ${fmtNum.format(n)}`;
-const centimos = (n: number) => Math.round(n * 100);
-
-/** Acepta "36,50", "36.50", "1.234,56" o "1,234.56". */
-function parseNumero(valor: string): number {
-  let s = valor.trim().replace(/[^\d.,]/g, '');
-  if (!s) return NaN;
-  const ultimaComa = s.lastIndexOf(',');
-  const ultimoPunto = s.lastIndexOf('.');
-  if (ultimaComa > ultimoPunto) {
-    s = s.replace(/\./g, '').replace(',', '.');
-  } else {
-    s = s.replace(/,/g, '');
-  }
-  return Number(s);
+function cargarCatalogo() {
+  suscribirProductos(
+    (lista, desdeCache) => {
+      productos = lista;
+      porId = new Map(lista.map((p) => [p.id, p]));
+      const estado = $('catalogo-estado');
+      if (!lista.length) {
+        estado.textContent = desdeCache && !navigator.onLine ? 'Sin conexión y sin catálogo guardado.' : 'El catálogo está vacío.';
+        estado.hidden = false;
+      } else {
+        estado.hidden = true;
+      }
+      renderChips();
+      render();
+    },
+    (e) => {
+      console.error(e);
+      $('catalogo-estado').textContent = 'No se pudo cargar el catálogo.';
+    },
+  );
 }
-
-const hoy = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 // ---------- Tasas BCV de dólar y euro (localStorage, una por día) ----------
 
@@ -181,11 +178,17 @@ function stepperHtml(id: string, cantidad: number, conQuitar = false) {
     </div>`;
 }
 
-const escapar = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-
-function normalizar(s: string) {
-  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+function renderChips() {
+  const categorias = [...new Set(productos.map((p) => p.categoria))];
+  if (filtroCategoria && !categorias.includes(filtroCategoria)) filtroCategoria = '';
+  $('chips').innerHTML =
+    `<button class="chip ${filtroCategoria ? '' : 'active'}" data-cat="">Todos</button>` +
+    categorias
+      .map(
+        (c) =>
+          `<button class="chip ${c === filtroCategoria ? 'active' : ''}" data-cat="${escapar(c)}">${escapar(c)}</button>`,
+      )
+      .join('');
 }
 
 function renderProductos(t: Tasas) {
@@ -195,7 +198,7 @@ function renderProductos(t: Tasas) {
   );
 
   if (!visibles.length) {
-    listaEl.innerHTML = '<li class="sin-resultados">No hay productos que coincidan.</li>';
+    listaEl.innerHTML = productos.length ? '<li class="sin-resultados">No hay productos que coincidan.</li>' : '';
     return;
   }
 
@@ -455,14 +458,6 @@ $('cerrar-ticket').addEventListener('click', () => ticket.classList.remove('open
 
 // ---------- Datos del cliente (solo en memoria, se borran al imprimir o en nueva venta) ----------
 
-interface Cliente {
-  nombre: string;
-  apellido: string;
-  cedula: string;
-  telefono: string;
-  correo: string;
-}
-
 const clienteVacio = (): Cliente => ({ nombre: '', apellido: '', cedula: '', telefono: '', correo: '' });
 let cliente = clienteVacio();
 
@@ -529,6 +524,7 @@ function datosRecibo(t: Tasas) {
     archivo: `recibo-${hoy()}-${String(ahora.getHours()).padStart(2, '0')}${String(ahora.getMinutes()).padStart(2, '0')}`,
     fecha: ahora.toLocaleDateString('es-VE', { day: '2-digit', month: '2-digit', year: 'numeric' }),
     hora: ahora.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }),
+    atiende: sesion.perfil.nombre,
     cliente: filasCliente(),
     tasas: tasasAplicadas(t),
     lineas: lineas.map((l) => {
@@ -539,10 +535,51 @@ function datosRecibo(t: Tasas) {
   };
 }
 
+// ---------- Registro de la venta en Firestore ----------
+
+/** Firma del recibo registrado por última vez, para no guardar dos veces la misma venta al reimprimir. */
+let firmaRegistrada: string | null = null;
+
+const firmaActual = () => JSON.stringify({ lineas, cliente });
+
+function registrarVentaActual(t: Tasas, origen: 'impresion' | 'pdf') {
+  const firma = firmaActual();
+  if (firma === firmaRegistrada) return;
+  const r = datosRecibo(t);
+  const lineasVenta: VentaLinea[] = r.lineas.map((l) => ({
+    id: l.id,
+    nombre: l.nombre,
+    categoria: categoriaDe(l) ?? null,
+    precioUsd: l.precioUsd,
+    cantidad: l.cantidad,
+    usd: l.usd,
+    bs: l.bs,
+  }));
+  const hayCliente = Object.values(cliente).some((v) => v);
+  const { listo } = registrarVenta({
+    vendedorUid: sesion.user.uid,
+    vendedorNombre: sesion.perfil.nombre,
+    cliente: hayCliente ? { ...cliente } : null,
+    tasas: { usd: t.usd, eur: t.eur },
+    lineas: lineasVenta,
+    totalUsd: r.totales.usd,
+    totalBs: r.totales.bs,
+    origen,
+  });
+  firmaRegistrada = firma;
+  listo.catch((e) => {
+    console.error(e);
+    firmaRegistrada = null;
+    toast('La venta no se pudo guardar en el historial.', 4000);
+  });
+  toast(navigator.onLine ? 'Venta registrada.' : 'Venta guardada; se enviará cuando haya internet.', 3000);
+}
+
 // ---------- Imprimir ----------
 
 function imprimir(t: Tasas) {
   const r = datosRecibo(t);
+  registrarVentaActual(t, 'impresion');
   const filas = r.lineas
     .map(
       (l) => `
@@ -557,11 +594,12 @@ function imprimir(t: Tasas) {
   $('print-area').innerHTML = `
     <div class="recibo">
       <img src="/logo.jpeg" alt="">
-      <div class="c b">${escapar(datos.negocio.nombre)}</div>
-      <div class="c">RIF ${escapar(datos.negocio.rif)}</div>
+      <div class="c b">${escapar(NEGOCIO.nombre)}</div>
+      <div class="c">RIF ${escapar(NEGOCIO.rif)}</div>
       <hr>
       <table>
         <tr><td>Fecha</td><td class="r">${r.fecha} ${r.hora}</td></tr>
+        <tr><td>Atiende</td><td class="r wrap">${escapar(r.atiende)}</td></tr>
         ${r.cliente.map(([k, v]) => `<tr><td>${k}</td><td class="r wrap">${escapar(v)}</td></tr>`).join('')}
         ${r.tasas.map(([k, v]) => `<tr><td>${k}</td><td class="r">${fmtBs(v)}</td></tr>`).join('')}
       </table>
@@ -612,6 +650,7 @@ async function cargarLogo(): Promise<string | null> {
 
 async function guardarPdf(t: Tasas) {
   const r = datosRecibo(t);
+  registrarVentaActual(t, 'pdf');
   const ancho = 80;
   const margen = 5;
   const util = ancho - margen * 2;
@@ -624,7 +663,7 @@ async function guardarPdf(t: Tasas) {
   medir.setFont('courier', 'normal');
   const lineasCliente = r.cliente.map(([k, v]) => medir.splitTextToSize(`${k}: ${v}`, util) as string[]);
   const altoCliente = lineasCliente.reduce((a, l) => a + l.length * 3.8, 0);
-  const alto = Math.max(120, 95 + altoItems + altoCliente + r.tasas.length * 3.8);
+  const alto = Math.max(120, 99 + altoItems + altoCliente + r.tasas.length * 3.8);
 
   const doc = new jsPDF({ unit: 'mm', format: [ancho, alto] });
   let y = margen;
@@ -654,10 +693,11 @@ async function guardarPdf(t: Tasas) {
     y += 4;
   };
 
-  centro(datos.negocio.nombre, 10, 'bold');
-  centro(`RIF ${datos.negocio.rif}`, 8.5);
+  centro(NEGOCIO.nombre, 10, 'bold');
+  centro(`RIF ${NEGOCIO.rif}`, 8.5);
   separador();
   par('Fecha', `${r.fecha} ${r.hora}`);
+  par('Atiende', r.atiende);
   doc.setFont('courier', 'normal').setFontSize(8.5);
   for (const t of lineasCliente.flat()) {
     doc.text(t, margen, y);
@@ -694,6 +734,7 @@ $('btn-imprimir').addEventListener('click', () => conTasa(imprimir));
 $('btn-pdf').addEventListener('click', () => conTasa((t) => void guardarPdf(t)));
 $('btn-nueva').addEventListener('click', () => {
   lineas = [];
+  firmaRegistrada = null;
   guardarCarrito();
   borrarCliente();
   ticket.classList.remove('open');
@@ -703,8 +744,6 @@ $('btn-nueva').addEventListener('click', () => {
 
 // ---------- Sin conexión (service worker) ----------
 
-const PAGE_CACHE = 'sc-pagina-v1';
-
 function renderConexion() {
   $('sin-conexion').hidden = navigator.onLine;
 }
@@ -712,39 +751,24 @@ window.addEventListener('online', renderConexion);
 window.addEventListener('offline', renderConexion);
 renderConexion();
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', async () => {
-    try {
-      await navigator.serviceWorker.register('/sw.js');
-      const sw = (await navigator.serviceWorker.ready).active;
-      // Enviar los recursos cargados para que queden guardados y se limpien los de versiones viejas
-      const urls = performance.getEntriesByType('resource').map((e) => e.name);
-      sw?.postMessage({ tipo: 'recursos', urls });
-    } catch (err) {
-      console.warn('No se pudo registrar el service worker', err);
-    }
-  });
+async function registrarServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    await navigator.serviceWorker.register('/sw.js');
+    const sw = (await navigator.serviceWorker.ready).active;
+    // Enviar los recursos cargados para que queden guardados y se limpien los de versiones viejas
+    const urls = performance.getEntriesByType('resource').map((e) => e.name);
+    sw?.postMessage({ tipo: 'recursos', urls, cache: PAGE_CACHE });
+  } catch (err) {
+    console.warn('No se pudo registrar el service worker', err);
+  }
 }
 
-// Al cerrar sesión se borra la copia guardada para uso sin conexión
-$<HTMLFormElement>('logout-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const form = e.target as HTMLFormElement;
-  if ('caches' in window) await caches.delete(PAGE_CACHE).catch(() => {});
-  form.submit();
+// ---------- Arranque ----------
+
+requerirSesion().then((s) => {
+  sesion = s;
+  cargarCatalogo();
+  revisarTasaDelDia();
+  void registrarServiceWorker();
 });
-
-// ---------- Utilidades ----------
-
-let toastTimer: ReturnType<typeof setTimeout> | undefined;
-function toast(msg: string) {
-  document.querySelector('.toast')?.remove();
-  const el = document.createElement('div');
-  el.className = 'toast';
-  el.textContent = msg;
-  document.body.appendChild(el);
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.remove(), 2200);
-}
-
-revisarTasaDelDia();

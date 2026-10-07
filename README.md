@@ -1,57 +1,101 @@
 # Speed Copy · Calculadora de ventas
 
-Calculadora para Speed Copy 3023, C.A. hecha con [Astro](https://astro.build) y desplegada en Netlify (SSR con `@astrojs/netlify`).
+Calculadora y registro de ventas para Speed Copy 3023, C.A. Hecha con [Astro](https://astro.build) como sitio estático desplegado en Netlify, con [Firebase](https://console.firebase.google.com/project/speed-copy-calculadora) (Authentication y Firestore) para usuarios, catálogo e historial de ventas.
 
-- Login con usuario y clave definidos en `.env`, con una cookie de sesión firmada (12 h).
+- **Usuarios individuales**: cada persona entra con su correo y clave. Hay dos roles:
+  - *Vendedor*: usa la calculadora y ve sus propias ventas.
+  - *Administrador*: además gestiona productos, usuarios y ve todas las ventas.
+- **Catálogo en Firestore**: los administradores agregan, editan y eliminan productos desde la app (uno a uno o varios a la vez), o importan la lista de precios desde Excel o CSV.
+- **Registro de ventas**: al imprimir o guardar el PDF de un recibo, la venta queda guardada con sus líneas, montos en $ y Bs, tasas usadas, datos del cliente y quién la atendió. Reimprimir el mismo recibo no la duplica.
+- **Historial de ventas**: por rango de fechas (hoy, ayer, semana, mes) y por vendedor, con totales y exportación a CSV para cuadrar con las facturas.
 - Precios en dólares, con conversión a bolívares según la **tasa BCV del dólar** y/o la **tasa BCV del euro** del día:
   - Si solo hay una tasa cargada, se usa esa para todos los productos.
   - Si están las dos, la del euro se usa para la categoría **Papelería y útiles** y la del dólar para todo lo demás (incluidos los conceptos libres).
   - Para quitar una tasa basta con dejar su campo vacío.
 - Las tasas se guardan en `localStorage` con la fecha. Si el día cambió, la app pide las tasas nuevas.
 - El recibo se puede imprimir (formato ticket de 80 mm) o guardar en PDF, y siempre muestra los montos en $ y en Bs.
-- Datos del cliente opcionales (nombre, apellido, cédula, teléfono y correo) que se cargan desde un modal. No se guardan en ningún lado y se borran al imprimir o al empezar una nueva venta.
+- Datos del cliente opcionales (nombre, apellido, cédula, teléfono y correo) que se cargan desde un modal y se borran al imprimir o al empezar una nueva venta.
 - Diseño oscuro, pensado primero para móviles.
 - Funciona sin conexión (PWA): ver abajo.
 
+## Páginas
+
+| Ruta         | Quién         | Qué hace                                                                        |
+| ------------ | ------------- | ------------------------------------------------------------------------------- |
+| `/login`     | Todos         | Inicio de sesión y "¿Olvidaste tu clave?" (envía un correo).                    |
+| `/`          | Todos         | Calculadora y recibo.                                                           |
+| `/ventas`    | Todos         | Historial. Los vendedores solo ven las suyas.                                   |
+| `/productos` | Administrador | Catálogo: alta, edición, eliminación (individual o en lote) e importación.      |
+| `/usuarios`  | Administrador | Crear cuentas, cambiar rol, activar o desactivar, enviar correo de nueva clave. |
+
+Desde el menú (☰) cualquier usuario puede cambiar su propia clave.
+
+## Importar la lista de precios
+
+En **Productos → Importar Excel o CSV** se sube el archivo (`.xls`, `.xlsx` o `.csv`, separado por coma, punto y coma o tabulador). La app busca la fila de encabezados con una columna de nombre (`Nombre Producto`) y una de precio en dólares (`PRECIO $`), y muestra una vista previa antes de aplicar nada:
+
+- **Nuevo**: no existe en el catálogo. Se le propone una categoría que se puede cambiar.
+- **Cambia**: ya existe y el precio es distinto.
+- **Igual**: sin cambios de precio (el orden de la lista se actualiza igual).
+- **No están en el Excel**: productos del catálogo que no aparecen en el archivo. Se conservan a menos que se marquen para eliminar.
+
+Los productos se emparejan por nombre, así que si en el archivo se renombra uno, aparecerá como nuevo y el anterior en la lista de faltantes.
+
+Para borrar varios productos a la vez, se marcan con las casillas de la tabla (la casilla del encabezado selecciona todos los visibles) y se pulsa **Eliminar seleccionados**.
+
 ## Uso sin conexión
 
-Un service worker (`public/sw.js`) guarda una copia de la calculadora para cuando no hay internet:
+Un service worker (`public/sw.js`) guarda las páginas y los archivos de la app. Los datos (sesión, catálogo y ventas) los guarda Firebase en el navegador:
 
-- La copia solo se guarda cuando la página se abre con una sesión válida. Si el servidor redirige al login, la copia se borra.
-- Cerrar sesión también borra la copia.
-- La copia vence a los **5 días** sin abrir la app con internet (`MAX_OFFLINE_DAYS` en `public/sw.js`). Después de eso, hay que conectarse e iniciar sesión otra vez.
-- Cada vez que se abre con internet se carga la versión más reciente, que reemplaza a la copia anterior.
-- Sin conexión siguen funcionando las tasas BCV, el recibo, la impresión y el PDF. Lo único que no funciona es iniciar sesión.
+- Para iniciar sesión hace falta internet. Una vez dentro, la sesión queda guardada en el dispositivo.
+- El catálogo se mantiene en caché y se actualiza solo cuando hay conexión.
+- Las ventas registradas sin internet quedan en el dispositivo y se envían solas al reconectarse.
+- Cerrar sesión borra la caché de páginas y los datos de Firestore guardados en el dispositivo.
 - En el celular se puede instalar con "Agregar a pantalla de inicio".
 
-## Configuración
+## Firebase
+
+Proyecto: `speed-copy-calculadora`. La configuración web está en `src/lib/firebase.ts` (es pública; la seguridad la dan las reglas).
+
+- **Authentication**: proveedor "Correo electrónico/contraseña".
+- **Firestore**: colecciones `usuarios/{uid}` (nombre, email, rol, activo), `productos/{id}` (nombre, categoria, precioUsd, orden) y `ventas/{id}`.
+- **Reglas**: `firestore.rules`. Los vendedores solo pueden crear ventas a su nombre y leer las suyas; los administradores gestionan todo. Un administrador no puede quitarse su propio rol ni desactivarse.
+- **Índices**: `firestore.indexes.json` (ventas por vendedor y día).
+
+Para desplegar reglas e índices después de cambiarlos:
 
 ```bash
-cp .env.example .env   # editar AUTH_USER, AUTH_PASSWORD y AUTH_SECRET
+npm run deploy:firestore    # requiere `firebase login`
+```
+
+### Scripts de administración
+
+Usan la sesión de `gcloud auth login` (no hace falta clave de cuenta de servicio):
+
+```bash
+npm run seed                                                 # carga src/data/precios.json en productos
+npm run crear-admin -- correo@ejemplo.com "Nombre" [clave]   # crea o promueve un administrador
+```
+
+Si no se pasa clave, la persona debe usar "¿Olvidaste tu clave?" en el login para crear una.
+
+## Desarrollo
+
+```bash
 npm install
 npm run dev            # http://localhost:4321
+npm run check          # tipos
+npm run build          # genera dist/
 ```
 
 ## Despliegue en Netlify
 
 1. En Netlify: **Add new project → Import an existing project → GitHub** y elegir `miguelfiguera/copy-center-calculator`.
-2. La configuración de build se toma de `netlify.toml` (`npm run build`, Node 22), así que no hay que cambiar nada.
-3. En **Project configuration → Environment variables**, agregar `AUTH_USER`, `AUTH_PASSWORD` y `AUTH_SECRET`. Para el secreto se puede generar una cadena aleatoria con `openssl rand -hex 32`.
-4. Hacer el deploy. Si después cambias las variables, hay que volver a desplegar.
+2. La configuración de build se toma de `netlify.toml` (`npm run build`, Node 22). No hacen falta variables de entorno.
+3. En Firebase Authentication → **Settings → Authorized domains**, agregar el dominio de Netlify si no está (`*.netlify.app` o el dominio propio).
 
 Cada push a `main` despliega solo.
 
-## Lista de precios
+## Lista de precios inicial
 
-Los productos y servicios están en [`src/data/precios.json`](src/data/precios.json):
-
-```json
-{ "id": "fotocopia-carta", "nombre": "FOTOCOPIA CARTA", "categoria": "Copias e impresiones", "precioUsd": 0.17 }
-```
-
-- `precioUsd` siempre va en dólares.
-- Si un producto tiene precio `0`, aparece como "Precio por definir" y no se puede agregar al recibo.
-- Las categorías se generan solas a partir del campo `categoria`.
-- Después de editar el JSON, hay que volver a compilar y desplegar.
-
-La lista inicial se generó a partir de `LISTA DE PRECIOS SPEED COPY 2026.xls`.
+`src/data/precios.json` es la semilla que se cargó a Firestore con `npm run seed`, generada a partir de `LISTA DE PRECIOS SPEED COPY 2026.xls`. El catálogo vivo está en Firestore; el JSON solo sirve para volver a cargarlo desde cero.

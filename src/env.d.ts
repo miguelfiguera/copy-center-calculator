@@ -1,5 +1,1 @@
-declare namespace App {
-  interface Locals {
-    user: string | null;
-  }
-}
+/// <reference types="astro/client" />

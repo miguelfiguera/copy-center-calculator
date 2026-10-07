@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "ventas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "vendedorUid", "order": "ASCENDING" },
+        { "fieldPath": "dia", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

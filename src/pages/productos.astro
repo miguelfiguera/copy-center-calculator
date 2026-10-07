@@ -1,0 +1,179 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Topbar from '../components/Topbar.astro';
+---
+
+<Layout title="Productos · Speed Copy" protegida>
+  <Topbar titulo="Productos" />
+
+  <main class="pagina">
+    <div class="barra-acciones">
+      <input id="buscar" class="input" type="search" placeholder="Buscar producto…" autocomplete="off" />
+      <select id="filtro-cat" class="input">
+        <option value="">Todas las categorías</option>
+      </select>
+      <button class="btn btn-primary" type="button" id="nuevo">+ Nuevo producto</button>
+      <button class="btn" type="button" id="importar">Importar Excel o CSV</button>
+      <input type="file" id="archivo" accept=".xls,.xlsx,.xlsm,.csv,text/csv" hidden />
+    </div>
+    <p class="muted" id="conteo"></p>
+
+    <div class="seleccion card" id="seleccion" hidden>
+      <strong id="seleccion-conteo">0 seleccionados</strong>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost" type="button" id="seleccion-limpiar">Quitar selección</button>
+      <button class="btn btn-danger" type="button" id="seleccion-eliminar">Eliminar seleccionados</button>
+    </div>
+
+    <div class="tabla-wrap">
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th class="col-check"><input type="checkbox" id="check-todos" aria-label="Seleccionar todos los visibles" /></th>
+            <th>Producto</th>
+            <th>Categoría</th>
+            <th class="num">Precio $</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="filas"></tbody>
+      </table>
+      <p class="vacio-tabla" id="productos-vacio">Cargando…</p>
+    </div>
+  </main>
+
+  <dialog id="prod-dialog" class="dialog">
+    <form id="prod-form" class="form-campos">
+      <h2 id="prod-titulo">Nuevo producto</h2>
+      <input type="hidden" name="id" />
+      <label>
+        <span>Nombre</span>
+        <input class="input" name="nombre" required maxlength="120" autocomplete="off" autocapitalize="characters" />
+      </label>
+      <div class="fila">
+        <label>
+          <span>Categoría</span>
+          <input class="input" name="categoria" list="categorias" required maxlength="60" autocomplete="off" />
+          <datalist id="categorias"></datalist>
+        </label>
+        <label>
+          <span>Precio en $</span>
+          <input class="input" name="precio" inputmode="decimal" placeholder="0,00" required autocomplete="off" />
+        </label>
+      </div>
+      <p class="muted nota">Si el precio es 0, el producto aparece como "Precio por definir" y no se puede vender.</p>
+      <p class="dialog-error" id="prod-error" hidden></p>
+      <div class="dialog-actions">
+        <button class="btn btn-ghost btn-danger" type="button" id="prod-eliminar" hidden>Eliminar</button>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost" type="button" id="prod-cancelar">Cancelar</button>
+        <button class="btn btn-primary" type="submit" id="prod-guardar">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="import-dialog" class="dialog ancho">
+    <form id="import-form" method="dialog">
+      <h2>Importar lista de precios</h2>
+      <p class="muted nota">Sirve un Excel (.xls, .xlsx) o un CSV con una columna de nombre y otra de precio en $.</p>
+      <p id="import-resumen"></p>
+      <div class="tabla-wrap import-tabla">
+        <table class="tabla">
+          <thead>
+            <tr>
+              <th>Producto</th>
+              <th>Categoría</th>
+              <th class="num">Precio $</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="import-filas"></tbody>
+        </table>
+      </div>
+      <div id="import-faltantes" hidden>
+        <h3>No están en el Excel</h3>
+        <p>Marca los que quieras eliminar del catálogo. Los demás se conservan.</p>
+        <div id="import-faltantes-lista" class="faltantes"></div>
+      </div>
+      <p class="dialog-error" id="import-error" hidden></p>
+      <div class="dialog-actions">
+        <button class="btn btn-ghost" type="button" id="import-cancelar">Cancelar</button>
+        <button class="btn btn-primary" type="button" id="import-aplicar">Aplicar cambios</button>
+      </div>
+    </form>
+  </dialog>
+</Layout>
+
+<script>
+  import '../scripts/productos';
+</script>
+
+<style>
+  .seleccion {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.9rem;
+    border-color: rgba(255, 77, 109, 0.45);
+  }
+
+  .seleccion .spacer {
+    flex: 1;
+  }
+
+  .col-check,
+  :global(.tabla td.col-check) {
+    width: 2.2rem;
+    padding-right: 0;
+  }
+
+  :global(.tabla .col-check input) {
+    width: 1.1rem;
+    height: 1.1rem;
+    accent-color: var(--accent);
+    vertical-align: middle;
+  }
+
+  :global(.tabla tr.seleccionada td) {
+    background: rgba(30, 144, 255, 0.08);
+  }
+
+  .nota {
+    margin: 0;
+    font-size: 0.8rem;
+  }
+
+  .import-tabla {
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+
+  .import-tabla :global(select) {
+    padding: 0.3rem 0.4rem;
+    font-size: 0.85rem;
+  }
+
+  h3 {
+    margin: 1rem 0 0.25rem;
+    font-size: 1rem;
+    color: var(--danger);
+  }
+
+  .faltantes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 0.4rem 1rem;
+    font-size: 0.88rem;
+  }
+
+  .faltantes :global(label) {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .faltantes :global(input) {
+    accent-color: var(--danger);
+  }
+</style>

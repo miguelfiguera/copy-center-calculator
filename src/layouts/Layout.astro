@@ -3,9 +3,11 @@ import '../styles/global.css';
 
 interface Props {
   title?: string;
+  /** Oculta el contenido hasta que `requerirSesion()` confirme que hay usuario. */
+  protegida?: boolean;
 }
 
-const { title = 'Speed Copy · Calculadora' } = Astro.props;
+const { title = 'Speed Copy · Calculadora', protegida = false } = Astro.props;
 ---
 
 <!doctype html>
@@ -24,7 +26,8 @@ const { title = 'Speed Copy · Calculadora' } = Astro.props;
     <meta name="apple-mobile-web-app-title" content="Speed Copy" />
     <title>{title}</title>
   </head>
-  <body>
+  <body class:list={{ protegida }}>
+    {protegida && <div class="cargando">Cargando…</div>}
     <slot />
   </body>
 </html>

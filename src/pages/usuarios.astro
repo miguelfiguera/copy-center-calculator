@@ -1,0 +1,89 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Topbar from '../components/Topbar.astro';
+---
+
+<Layout title="Usuarios · Speed Copy" protegida>
+  <Topbar titulo="Usuarios" />
+
+  <main class="pagina">
+    <div class="barra-acciones">
+      <h1>Usuarios</h1>
+      <span class="spacer"></span>
+      <button class="btn btn-primary" type="button" id="nuevo">+ Nuevo usuario</button>
+    </div>
+    <p class="muted">Cada persona entra con su correo y su clave. Las ventas quedan registradas a nombre de quien las hizo.</p>
+
+    <div class="tabla-wrap">
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th>Nombre</th>
+            <th>Correo</th>
+            <th>Rol</th>
+            <th>Estado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="filas"></tbody>
+      </table>
+      <p class="vacio-tabla" id="usuarios-vacio">Cargando…</p>
+    </div>
+  </main>
+
+  <dialog id="user-dialog" class="dialog">
+    <form id="user-form" class="form-campos">
+      <h2 id="user-titulo">Nuevo usuario</h2>
+      <input type="hidden" name="uid" />
+      <label>
+        <span>Nombre</span>
+        <input class="input" name="nombre" required maxlength="80" autocomplete="off" autocapitalize="words" />
+      </label>
+      <label>
+        <span>Correo</span>
+        <input class="input" name="email" type="email" inputmode="email" required maxlength="120" autocomplete="off" autocapitalize="none" />
+      </label>
+      <label id="campo-clave">
+        <span>Clave inicial (mínimo 6 caracteres)</span>
+        <input class="input" name="clave" type="text" minlength="6" autocomplete="off" />
+      </label>
+      <label>
+        <span>Rol</span>
+        <select class="input" name="rol">
+          <option value="vendedor">Vendedor: usa la calculadora y ve sus ventas</option>
+          <option value="admin">Administrador: además gestiona productos, usuarios y todas las ventas</option>
+        </select>
+      </label>
+      <label class="check" id="campo-activo">
+        <input type="checkbox" name="activo" />
+        <span>Cuenta activa</span>
+      </label>
+      <p class="dialog-error" id="user-error" hidden></p>
+      <div class="dialog-actions">
+        <button class="btn btn-ghost" type="button" id="user-reset" hidden>Enviar correo para cambiar clave</button>
+        <span class="spacer"></span>
+        <button class="btn btn-ghost" type="button" id="user-cancelar">Cancelar</button>
+        <button class="btn btn-primary" type="submit" id="user-guardar">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+</Layout>
+
+<script>
+  import '../scripts/usuarios';
+</script>
+
+<style>
+  .spacer {
+    flex: 1;
+  }
+
+  .pagina > .muted {
+    margin: -0.5rem 0 0;
+    font-size: 0.9rem;
+  }
+
+  .dialog-actions {
+    flex-wrap: wrap;
+  }
+</style>

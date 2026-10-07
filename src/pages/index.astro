@@ -1,11 +1,9 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import precios from '../data/precios.json';
-
-const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
+import Menu from '../components/Menu.astro';
 ---
 
-<Layout>
+<Layout protegida>
   <header class="topbar">
     <div class="brand">
       <img src="/logo.jpeg" alt="Speed Copy" width="64" height="48" />
@@ -30,11 +28,7 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
       <small id="tasa-fecha" class="tasa-fecha">Sin tasa para hoy</small>
     </div>
 
-    <form method="post" action="/api/logout" id="logout-form">
-      <button class="btn btn-ghost logout" type="submit" title="Cerrar sesión" aria-label="Cerrar sesión">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-      </button>
-    </form>
+    <Menu />
   </header>
   <div class="cmyk-bar"></div>
 
@@ -44,11 +38,11 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
         <input id="buscar" class="input" type="search" placeholder="Buscar producto o servicio…" autocomplete="off" />
         <div class="chips" id="chips">
           <button class="chip active" data-cat="">Todos</button>
-          {categorias.map((c) => <button class="chip" data-cat={c}>{c}</button>)}
         </div>
       </div>
 
       <ul id="productos" class="productos"></ul>
+      <p id="catalogo-estado" class="sin-resultados">Cargando catálogo…</p>
 
       <details class="libre">
         <summary>+ Agregar concepto libre</summary>
@@ -165,7 +159,6 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
 
   <div id="print-area" class="print-area" aria-hidden="true"></div>
 
-  <script type="application/json" id="precios-data" set:html={JSON.stringify(precios)} />
 </Layout>
 
 <script>
@@ -173,46 +166,6 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
 </script>
 
 <style>
-  .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 20;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.6rem 1rem;
-    padding-top: max(0.6rem, env(safe-area-inset-top));
-    background: rgba(7, 9, 13, 0.92);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--border);
-  }
-
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    margin-right: auto;
-    min-width: 0;
-  }
-
-  .brand img {
-    width: 52px;
-    height: 39px;
-    object-fit: cover;
-    border-radius: 8px;
-  }
-
-  .brand div {
-    display: flex;
-    flex-direction: column;
-    line-height: 1.1;
-  }
-
-  .brand small {
-    color: var(--muted);
-    font-size: 0.75rem;
-  }
-
   .tasa {
     display: grid;
     grid-template-columns: auto auto;
@@ -287,23 +240,6 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
   .tasa-dialog-nota {
     margin-top: 0.75rem;
     font-size: 0.8rem;
-    color: var(--muted);
-  }
-
-  .sin-conexion {
-    flex: none;
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    background: rgba(255, 77, 109, 0.15);
-    border: 1px solid rgba(255, 77, 109, 0.45);
-    color: var(--danger);
-    font-size: 0.72rem;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  .logout {
-    padding: 0.55rem;
     color: var(--muted);
   }
 
@@ -519,44 +455,6 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
     font-weight: 600;
   }
 
-  .dialog {
-    width: min(92vw, 440px);
-    padding: 1.25rem;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    color: var(--text);
-    box-shadow: var(--shadow);
-  }
-
-  .dialog::backdrop {
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(3px);
-  }
-
-  .dialog h2 {
-    margin: 0 0 0.5rem;
-    color: var(--yellow);
-  }
-
-  .dialog p {
-    margin: 0 0 1rem;
-    color: var(--muted);
-    font-size: 0.92rem;
-  }
-
-  .dialog-error {
-    margin-top: 0.5rem !important;
-    color: var(--danger) !important;
-  }
-
-  .dialog-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    margin-top: 1rem;
-  }
-
   .print-area {
     display: none;
   }
@@ -619,11 +517,6 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
   }
 
   @media (max-width: 480px) {
-    .brand div,
-    .brand img:has(~ .sin-conexion:not([hidden])) {
-      display: none;
-    }
-
     .tasa-field .input {
       width: 7.5rem;
     }
@@ -833,20 +726,6 @@ const categorias = [...new Set(precios.productos.map((p) => p.categoria))];
     padding: 2rem 0;
     text-align: center;
     color: var(--muted);
-  }
-
-  .toast {
-    position: fixed;
-    left: 50%;
-    top: 5rem;
-    z-index: 100;
-    transform: translateX(-50%);
-    padding: 0.6rem 1rem;
-    border-radius: 10px;
-    background: var(--surface-2);
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow);
-    font-size: 0.9rem;
   }
 
   /* Recibo impreso */

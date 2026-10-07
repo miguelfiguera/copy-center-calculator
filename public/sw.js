@@ -1,18 +1,15 @@
-// Service worker de Speed Copy: permite usar la calculadora sin conexión.
+// Service worker de Speed Copy: permite usar la app sin conexión.
 //
-// - La página principal ("/") se pide primero a la red. Si responde con sesión válida
-//   (200 sin redirección), se guarda una copia con la fecha. Sin red, se sirve esa copia.
-// - La copia solo existe si hubo sesión válida: si el servidor redirige al login, se borra.
-// - La copia vence a los MAX_OFFLINE_DAYS días sin conectarse; luego hay que iniciar sesión.
+// - Las páginas (/, /login, /ventas, /productos, /usuarios) se piden primero a la red y se guarda
+//   una copia. Sin red, se sirve la copia; si no hay copia, una página de aviso.
 // - Los archivos de /_astro/ tienen hash en el nombre, así que se sirven desde caché.
+// - Los datos (catálogo, ventas, sesión) no pasan por aquí: los guarda Firebase en IndexedDB.
+// - Al cerrar sesión, la app borra la caché de páginas.
 
-const MAX_OFFLINE_DAYS = 5;
-const PAGE_CACHE = 'sc-pagina-v1';
-const ASSET_CACHE = 'sc-assets-v1';
-const CACHED_AT_HEADER = 'x-sc-guardado';
+const PAGE_CACHE = 'sc-paginas-v2';
+const ASSET_CACHE = 'sc-assets-v2';
 const STATIC_ASSETS = ['/logo.jpeg', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png'];
-
-const MAX_AGE_MS = MAX_OFFLINE_DAYS * 24 * 60 * 60 * 1000;
+const PAGINAS = ['/', '/login', '/ventas', '/productos', '/usuarios'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -37,14 +34,14 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   const url = new URL(request.url);
-  if (url.origin !== self.location.origin) return;
+  if (url.origin !== self.location.origin || request.method !== 'GET') return;
 
   if (request.mode === 'navigate') {
     event.respondWith(navegacion(request, url));
     return;
   }
 
-  if (request.method === 'GET' && (url.pathname.startsWith('/_astro/') || STATIC_ASSETS.includes(url.pathname))) {
+  if (url.pathname.startsWith('/_astro/') || STATIC_ASSETS.includes(url.pathname)) {
     event.respondWith(assetCacheFirst(request));
   }
 });
@@ -56,49 +53,24 @@ self.addEventListener('message', (event) => {
   }
 });
 
-async function navegacion(request, url) {
-  const esInicio = request.method === 'GET' && url.pathname === '/';
+const clavePagina = (url) => url.pathname.replace(/\/+$/, '') || '/';
 
+async function navegacion(request, url) {
+  const clave = clavePagina(url);
+  const esPagina = PAGINAS.includes(clave);
   try {
     const res = await fetch(request);
-    if (esInicio) {
-      // Las navegaciones usan redirect: 'manual', así que una redirección llega como 'opaqueredirect'
-      const redirigido = res.redirected || res.type === 'opaqueredirect' || (res.status >= 300 && res.status < 400);
-      if (res.ok && !redirigido) {
-        await guardarPagina(res.clone());
-      } else if (redirigido) {
-        // Sesión vencida o inválida: no conservar la copia
-        await caches.delete(PAGE_CACHE);
-      }
+    if (esPagina && res.ok) {
+      const cache = await caches.open(PAGE_CACHE);
+      await cache.put(clave, res.clone());
     }
     return res;
   } catch {
-    if (esInicio) {
-      const copia = await paginaGuardada();
-      if (copia) return copia;
-    }
+    const cache = await caches.open(PAGE_CACHE);
+    const copia = await cache.match(clave);
+    if (copia) return copia;
     return paginaSinConexion();
   }
-}
-
-async function guardarPagina(res) {
-  const headers = new Headers(res.headers);
-  headers.set(CACHED_AT_HEADER, String(Date.now()));
-  const body = await res.blob();
-  const cache = await caches.open(PAGE_CACHE);
-  await cache.put('/', new Response(body, { status: 200, headers }));
-}
-
-async function paginaGuardada() {
-  const cache = await caches.open(PAGE_CACHE);
-  const res = await cache.match('/');
-  if (!res) return null;
-  const guardado = Number(res.headers.get(CACHED_AT_HEADER));
-  if (!guardado || Date.now() - guardado > MAX_AGE_MS) {
-    await caches.delete(PAGE_CACHE);
-    return null;
-  }
-  return res;
 }
 
 async function assetCacheFirst(request) {
@@ -128,14 +100,6 @@ async function sincronizarAssets(urls) {
       }
     }),
   );
-
-  // Borrar archivos de versiones anteriores que la página ya no usa
-  if (usados.size) {
-    for (const req of await cache.keys()) {
-      const path = new URL(req.url).pathname;
-      if (path.startsWith('/_astro/') && !usados.has(path)) await cache.delete(req);
-    }
-  }
 }
 
 function paginaSinConexion() {
@@ -162,7 +126,7 @@ function paginaSinConexion() {
   <div class="card">
     <img src="/logo.jpeg" alt="Speed Copy">
     <h1>Sin conexión</h1>
-    <p>Necesitas internet para iniciar sesión. La calculadora funciona sin conexión hasta ${MAX_OFFLINE_DAYS} días después de la última vez que se abrió con internet y una sesión activa.</p>
+    <p>Esta página todavía no se ha guardado en el dispositivo. Conéctate a internet, inicia sesión y vuelve a intentarlo.</p>
     <button onclick="location.href='/'">Reintentar</button>
   </div>
 </body>

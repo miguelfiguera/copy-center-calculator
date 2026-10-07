@@ -7,5 +7,7 @@ dist/
 *.log
 .DS_Store
 .playwright-mcp/
+.firebase/
+firebase-debug.log
 WhatsApp Image*.jpeg
 .netlify/

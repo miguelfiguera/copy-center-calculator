@@ -1,0 +1,26 @@
+---
+// Barra superior de las páginas secundarias (ventas, productos, usuarios).
+import Menu from './Menu.astro';
+
+interface Props {
+  titulo: string;
+}
+
+const { titulo } = Astro.props;
+---
+
+<header class="topbar">
+  <div class="brand">
+    <a href="/" class="brand-link" aria-label="Ir a la calculadora">
+      <img src="/logo.jpeg" alt="Speed Copy" width="64" height="48" />
+    </a>
+    <div>
+      <strong>Speed Copy</strong>
+      <small>{titulo}</small>
+    </div>
+    <span id="sin-conexion" class="sin-conexion" hidden>Sin conexión</span>
+  </div>
+  <slot />
+  <Menu />
+</header>
+<div class="cmyk-bar"></div>

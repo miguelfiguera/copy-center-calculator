@@ -8,12 +8,16 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "check": "astro check"
+    "check": "astro check",
+    "seed": "node scripts/seed-productos.mjs",
+    "crear-admin": "node scripts/crear-admin.mjs",
+    "deploy:firestore": "firebase deploy --only firestore"
   },
   "dependencies": {
-    "@astrojs/netlify": "^8.2.6",
     "astro": "^7.3.5",
-    "jspdf": "^4.2.1"
+    "firebase": "^12.19.0",
+    "jspdf": "^4.2.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.10",

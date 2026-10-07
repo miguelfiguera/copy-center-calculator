@@ -1,0 +1,142 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Topbar from '../components/Topbar.astro';
+---
+
+<Layout title="Ventas · Speed Copy" protegida>
+  <Topbar titulo="Ventas" />
+
+  <main class="pagina">
+    <h1>Historial de ventas</h1>
+
+    <div class="card filtros">
+      <div class="campo">
+        <span>Desde</span>
+        <input class="input" type="date" id="desde" />
+      </div>
+      <div class="campo">
+        <span>Hasta</span>
+        <input class="input" type="date" id="hasta" />
+      </div>
+      <div class="campo" id="campo-vendedor" hidden>
+        <span>Vendedor</span>
+        <select class="input" id="vendedor">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="rapidos">
+        <button class="btn" type="button" data-rango="hoy">Hoy</button>
+        <button class="btn" type="button" data-rango="ayer">Ayer</button>
+        <button class="btn" type="button" data-rango="semana">Esta semana</button>
+        <button class="btn" type="button" data-rango="mes">Este mes</button>
+      </div>
+      <div class="botones">
+        <button class="btn btn-primary" type="button" id="buscar">Buscar</button>
+        <button class="btn" type="button" id="csv" disabled>Exportar CSV</button>
+      </div>
+    </div>
+
+    <div class="resumen">
+      <div class="card"><small>Ventas</small><strong id="res-cantidad">0</strong></div>
+      <div class="card"><small>Total $</small><strong id="res-usd">$0,00</strong></div>
+      <div class="card"><small>Total Bs</small><strong class="bs" id="res-bs">Bs 0,00</strong></div>
+    </div>
+
+    <div class="tabla-wrap">
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Vendedor</th>
+            <th>Cliente</th>
+            <th class="num">Ítems</th>
+            <th class="num">Total $</th>
+            <th class="num">Total Bs</th>
+          </tr>
+        </thead>
+        <tbody id="filas"></tbody>
+      </table>
+      <p class="vacio-tabla" id="ventas-vacio">Elige un rango de fechas y pulsa Buscar.</p>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import '../scripts/ventas';
+</script>
+
+<style>
+  .filtros {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.75rem;
+  }
+
+  .filtros .campo {
+    flex: 1 1 140px;
+  }
+
+  .rapidos,
+  .botones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .rapidos .btn {
+    padding: 0.55rem 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .botones {
+    margin-left: auto;
+  }
+
+  @media (max-width: 600px) {
+    .botones {
+      width: 100%;
+      margin-left: 0;
+    }
+
+    .botones .btn {
+      flex: 1;
+    }
+  }
+</style>
+
+<style is:global>
+  .venta-detalle {
+    display: grid;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+  }
+
+  .venta-detalle table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .venta-detalle td {
+    padding: 0.2rem 0.4rem;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .venta-detalle td.num {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  .venta-detalle .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1rem;
+    color: var(--muted);
+  }
+
+  .venta-detalle .acciones-detalle {
+    display: flex;
+    justify-content: flex-end;
+  }
+</style>

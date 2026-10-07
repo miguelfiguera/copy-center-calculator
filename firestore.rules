@@ -1,0 +1,85 @@
+rules_version = '2';
+
+// Reglas de Speed Copy Calculadora.
+// - usuarios/{uid}: perfil de cada cuenta (nombre, rol, activo). Solo los admins lo editan.
+// - productos/{id}: catálogo. Todo usuario activo lo lee; solo los admins lo editan.
+// - ventas/{id}: cada vendedor registra sus ventas y solo ve las suyas; los admins ven todas.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function perfil() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function activo() {
+      return autenticado()
+        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        && perfil().activo == true;
+    }
+
+    function esAdmin() {
+      return activo() && perfil().rol == 'admin';
+    }
+
+    function textoCorto(v, max) {
+      return v is string && v.size() <= max;
+    }
+
+    function perfilValido(d) {
+      return d.keys().hasOnly(['nombre', 'email', 'rol', 'activo', 'creado'])
+        && textoCorto(d.nombre, 80) && d.nombre.size() > 0
+        && textoCorto(d.email, 120)
+        && d.rol in ['admin', 'vendedor']
+        && d.activo is bool;
+    }
+
+    function productoValido(d) {
+      return d.keys().hasOnly(['nombre', 'categoria', 'precioUsd', 'orden', 'actualizado'])
+        && textoCorto(d.nombre, 120) && d.nombre.size() > 0
+        && textoCorto(d.categoria, 60) && d.categoria.size() > 0
+        && d.precioUsd is number && d.precioUsd >= 0
+        && d.orden is number;
+    }
+
+    function ventaValida(d) {
+      return d.vendedorUid == request.auth.uid
+        && textoCorto(d.vendedorNombre, 80)
+        && d.fecha == request.time
+        && d.fechaLocal is timestamp
+        && d.dia is string && d.dia.size() == 10
+        && d.lineas is list && d.lineas.size() > 0 && d.lineas.size() <= 200
+        && d.totalUsd is number && d.totalUsd >= 0
+        && d.totalBs is number && d.totalBs >= 0
+        && d.tasas is map
+        && d.origen in ['impresion', 'pdf']
+        && (d.cliente == null || d.cliente is map);
+    }
+
+    match /usuarios/{uid} {
+      allow get: if autenticado() && (request.auth.uid == uid || esAdmin());
+      allow list: if esAdmin();
+      allow create: if esAdmin() && perfilValido(request.resource.data);
+      // Un admin no puede quitarse a sí mismo el rol ni desactivarse
+      allow update: if esAdmin() && perfilValido(request.resource.data)
+        && (request.auth.uid != uid || (request.resource.data.rol == 'admin' && request.resource.data.activo == true));
+      allow delete: if false;
+    }
+
+    match /productos/{id} {
+      allow read: if activo();
+      allow create, update: if esAdmin() && productoValido(request.resource.data);
+      allow delete: if esAdmin();
+    }
+
+    match /ventas/{id} {
+      allow get: if activo() && (resource.data.vendedorUid == request.auth.uid || esAdmin());
+      allow list: if esAdmin() || (activo() && resource.data.vendedorUid == request.auth.uid);
+      allow create: if activo() && ventaValida(request.resource.data);
+      allow update: if false;
+      allow delete: if esAdmin();
+    }
+  }
+}
